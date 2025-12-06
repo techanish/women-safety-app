@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Bell, Menu, Shield } from 'lucide-react';
+import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SOSButton } from '@/components/SOSButton';
 import { QuickActions } from '@/components/QuickActions';
@@ -13,24 +13,39 @@ import { SettingsPanel } from '@/components/SettingsPanel';
 import { AlertHistory } from '@/components/AlertHistory';
 import { LocationPanel } from '@/components/LocationPanel';
 import { SOSActiveOverlay } from '@/components/SOSActiveOverlay';
+import { FakeCallSetup } from '@/components/FakeCallSetup';
 import { SafetyProvider, useSafety } from '@/contexts/SafetyContext';
-import { cn } from '@/lib/utils';
 
 function Dashboard() {
-  const { isSafeMode, isSOSActive, emergencyContacts } = useSafety();
+  const { isSafeMode, emergencyContacts } = useSafety();
   const [activeTab, setActiveTab] = useState('home');
+  const [showFakeCallSetup, setShowFakeCallSetup] = useState(false);
   const [showFakeCall, setShowFakeCall] = useState(false);
   const [fakeCallAnswered, setFakeCallAnswered] = useState(false);
+  const [fakeCallConfig, setFakeCallConfig] = useState<{
+    name: string;
+    number: string;
+    persona: 'father' | 'mother' | 'friend' | 'brother';
+  }>({
+    name: 'Papa',
+    number: '+91 98765 43210',
+    persona: 'father'
+  });
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
 
-  const handleFakeCall = () => {
+  const handleFakeCallSetup = () => {
+    setShowFakeCallSetup(true);
+  };
+
+  const handleStartFakeCall = (config: { name: string; number: string; persona: 'father' | 'mother' | 'friend' | 'brother' }) => {
+    setFakeCallConfig(config);
+    setShowFakeCallSetup(false);
     setFakeCallAnswered(false);
     setShowFakeCall(true);
   };
 
   const handleShareLocation = () => {
-    // Share location logic
     if (navigator.share) {
       navigator.share({
         title: 'My Location',
@@ -72,7 +87,7 @@ function Dashboard() {
               <div className="flex items-center gap-2">
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-accent" />
+                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary" />
                 </Button>
               </div>
             </header>
@@ -84,7 +99,7 @@ function Dashboard() {
             <div className="flex-1 flex flex-col items-center justify-center py-8">
               <SOSButton size="large" />
               <p className="mt-4 text-sm text-muted-foreground text-center">
-                Hold for 2 seconds to activate emergency alert
+                Tap to instantly trigger emergency alert
               </p>
             </div>
 
@@ -99,7 +114,7 @@ function Dashboard() {
                 Quick Actions
               </h3>
               <QuickActions
-                onFakeCall={handleFakeCall}
+                onFakeCall={handleFakeCallSetup}
                 onShareLocation={handleShareLocation}
                 onSafeRoute={handleSafeRoute}
                 onCheckIn={() => setShowCheckIn(true)}
@@ -110,14 +125,14 @@ function Dashboard() {
 
             {/* Emergency contacts reminder */}
             {emergencyContacts.length === 0 && (
-              <div className="p-4 rounded-2xl bg-warning/10 border border-warning/20 mb-4">
-                <p className="text-sm text-warning font-medium">
+              <div className="p-4 rounded-2xl bg-primary/10 border border-primary/20 mb-4">
+                <p className="text-sm text-primary font-medium">
                   ⚠️ Add emergency contacts for SOS alerts
                 </p>
                 <Button
                   variant="ghost"
                   size="sm"
-                  className="mt-2 text-warning"
+                  className="mt-2 text-primary"
                   onClick={() => setShowContacts(true)}
                 >
                   Add contacts →
@@ -130,7 +145,7 @@ function Dashboard() {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-hero">
+    <div className="min-h-screen bg-background">
       {renderContent()}
       
       {/* Bottom Navigation */}
@@ -139,11 +154,20 @@ function Dashboard() {
       {/* Overlays */}
       <SOSActiveOverlay />
 
+      {/* Fake Call Setup */}
+      {showFakeCallSetup && (
+        <FakeCallSetup
+          onClose={() => setShowFakeCallSetup(false)}
+          onStartCall={handleStartFakeCall}
+        />
+      )}
+
       {/* Fake Call Screen */}
       {showFakeCall && (
         <FakeCallScreen
-          callerName="Mom"
-          callerNumber="+91 98765 43210"
+          callerName={fakeCallConfig.name}
+          callerNumber={fakeCallConfig.number}
+          persona={fakeCallConfig.persona}
           isAnswered={fakeCallAnswered}
           onAnswer={() => setFakeCallAnswered(true)}
           onDecline={() => setShowFakeCall(false)}
