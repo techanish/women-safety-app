@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { 
   Mic, 
   Vibrate, 
@@ -13,6 +13,7 @@ import {
 import { Switch } from '@/components/ui/switch';
 import { useSafety } from '@/contexts/SafetyContext';
 import { cn } from '@/lib/utils';
+import { VoiceKeywordsDialog, NotificationsDialog, PrivacyDialog } from './SettingsDialogs';
 
 interface SettingItemProps {
   icon: React.ReactNode;
@@ -47,6 +48,9 @@ function SettingItem({ icon, label, description, action, onClick }: SettingItemP
 
 export function SettingsPanel() {
   const { settings, updateSettings } = useSafety();
+  const [showVoiceKeywords, setShowVoiceKeywords] = useState(false);
+  const [showNotifications, setShowNotifications] = useState(false);
+  const [showPrivacy, setShowPrivacy] = useState(false);
 
   return (
     <div className="flex flex-col h-full p-6 pb-24">
@@ -145,22 +149,36 @@ export function SettingsPanel() {
             icon={<Languages className="w-5 h-5" />}
             label="Voice Keywords"
             description="Customize trigger words"
-            onClick={() => {}}
+            onClick={() => setShowVoiceKeywords(true)}
           />
           <SettingItem
             icon={<Bell className="w-5 h-5" />}
             label="Notifications"
             description="Manage alert preferences"
-            onClick={() => {}}
+            onClick={() => setShowNotifications(true)}
           />
           <SettingItem
             icon={<Shield className="w-5 h-5" />}
             label="Privacy & Security"
             description="Data encryption settings"
-            onClick={() => {}}
+            onClick={() => setShowPrivacy(true)}
           />
         </div>
       </div>
+
+      {/* Dialogs */}
+      <VoiceKeywordsDialog 
+        isOpen={showVoiceKeywords} 
+        onClose={() => setShowVoiceKeywords(false)} 
+      />
+      <NotificationsDialog 
+        isOpen={showNotifications} 
+        onClose={() => setShowNotifications(false)} 
+      />
+      <PrivacyDialog 
+        isOpen={showPrivacy} 
+        onClose={() => setShowPrivacy(false)} 
+      />
     </div>
   );
 }

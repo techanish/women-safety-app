@@ -1,5 +1,7 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert } from '@/types/safety';
+import { supabase } from '@/integrations/supabase/client';
+import { toast } from 'sonner';
 
 interface SafetyContextType {
   // State
@@ -10,6 +12,7 @@ interface SafetyContextType {
   settings: AppSettings;
   isSOSActive: boolean;
   isSafeMode: boolean;
+  isSendingSMS: boolean;
   
   // Actions
   setCurrentLocation: (location: Location) => void;
@@ -25,6 +28,7 @@ interface SafetyContextType {
   cancelSOS: () => void;
   toggleSafeMode: () => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
+  shareLocation: () => Promise<void>;
 }
 
 const defaultSettings: AppSettings = {
@@ -48,6 +52,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [settings, setSettings] = useState<AppSettings>(defaultSettings);
   const [isSOSActive, setIsSOSActive] = useState(false);
   const [isSafeMode, setIsSafeMode] = useState(false);
+  const [isSendingSMS, setIsSendingSMS] = useState(false);
 
   // Load saved data from localStorage
   useEffect(() => {
@@ -92,6 +97,52 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       return () => navigator.geolocation.clearWatch(watchId);
     }
   }, []);
+
+  // Send SMS to emergency contacts
+  const sendEmergencySMS = useCallback(async (isLiveLocation = false) => {
+    if (emergencyContacts.length === 0) {
+      toast.error('No emergency contacts configured');
+      return false;
+    }
+
+    setIsSendingSMS(true);
+    
+    try {
+      const phoneNumbers = emergencyContacts.map(c => c.phone);
+      const message = isLiveLocation 
+        ? `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.`
+        : `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.`;
+
+      // Generate a live location tracking URL (using Google Maps for simplicity)
+      const liveLocationUrl = currentLocation 
+        ? `https://maps.google.com/?q=${currentLocation.latitude},${currentLocation.longitude}`
+        : undefined;
+
+      const { data, error } = await supabase.functions.invoke('send-sms', {
+        body: {
+          phoneNumbers,
+          message,
+          location: currentLocation,
+          liveLocationUrl,
+        },
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast.success(isLiveLocation ? 'Location shared with contacts' : 'Emergency SMS sent to all contacts');
+        return true;
+      } else {
+        throw new Error(data?.error || 'Failed to send SMS');
+      }
+    } catch (error) {
+      console.error('SMS error:', error);
+      toast.error('Failed to send SMS. Check your Fast2SMS configuration.');
+      return false;
+    } finally {
+      setIsSendingSMS(false);
+    }
+  }, [emergencyContacts, currentLocation]);
 
   const addEmergencyContact = (contact: Omit<EmergencyContact, 'id'>) => {
     const newContact: EmergencyContact = {
@@ -144,14 +195,18 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     setIsSOSActive(false);
   };
 
-  const triggerSOS = (type: SOSAlert['triggerType']) => {
+  const triggerSOS = async (type: SOSAlert['triggerType']) => {
     setIsSOSActive(true);
-    // In a real app, this would:
-    // - Send SMS to emergency contacts
-    // - Start recording
-    // - Share location
-    // - Play siren
+    
     console.log('SOS Triggered:', type, currentLocation);
+    
+    // Send SMS to emergency contacts
+    await sendEmergencySMS(false);
+    
+    // Play siren if enabled
+    if (settings.sirenEnabled) {
+      // Siren would be played here
+    }
   };
 
   const cancelSOS = () => {
@@ -166,6 +221,10 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     setSettings(prev => ({ ...prev, ...newSettings }));
   };
 
+  const shareLocation = async () => {
+    await sendEmergencySMS(true);
+  };
+
   return (
     <SafetyContext.Provider
       value={{
@@ -176,6 +235,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         settings,
         isSOSActive,
         isSafeMode,
+        isSendingSMS,
         setCurrentLocation,
         addEmergencyContact,
         removeEmergencyContact,
@@ -189,6 +249,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         cancelSOS,
         toggleSafeMode,
         updateSettings,
+        shareLocation,
       }}
     >
       {children}

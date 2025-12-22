@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useTextToSpeech, INDIAN_VOICES } from '@/hooks/useTextToSpeech';
 
 interface FakeCallScreenProps {
   callerName: string;
@@ -30,8 +31,27 @@ export function FakeCallScreen({
   const [aiMessage, setAiMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([]);
-  const speechSynthRef = useRef<SpeechSynthesisUtterance | null>(null);
   const recognitionRef = useRef<any>(null);
+  const { speak, stop, isPlaying } = useTextToSpeech();
+
+  // Get voice based on persona
+  const getVoiceForPersona = () => {
+    switch (persona) {
+      case 'mother':
+      case 'friend':
+        return { 
+          voiceName: INDIAN_VOICES.female.name, 
+          languageCode: INDIAN_VOICES.female.language 
+        };
+      case 'father':
+      case 'brother':
+      default:
+        return { 
+          voiceName: INDIAN_VOICES.male.name, 
+          languageCode: INDIAN_VOICES.male.language 
+        };
+    }
+  };
 
   // Timer for call duration
   useEffect(() => {
@@ -50,33 +70,13 @@ export function FakeCallScreen({
     }
   }, [isAnswered]);
 
-  // Speak AI message using Web Speech API
+  // Speak AI message using Google Cloud TTS
   useEffect(() => {
-    if (aiMessage && isAnswered && isSpeaker) {
-      speakMessage(aiMessage);
+    if (aiMessage && isAnswered && isSpeaker && !isPlaying) {
+      const voice = getVoiceForPersona();
+      speak(aiMessage, voice);
     }
-  }, [aiMessage, isSpeaker]);
-
-  const speakMessage = (text: string) => {
-    if ('speechSynthesis' in window) {
-      window.speechSynthesis.cancel();
-      
-      const utterance = new SpeechSynthesisUtterance(text);
-      utterance.rate = 0.95;
-      utterance.pitch = persona === 'mother' || persona === 'friend' ? 1.2 : 0.9;
-      utterance.volume = 1;
-      
-      // Try to get a voice that matches the persona
-      const voices = window.speechSynthesis.getVoices();
-      const hindiVoice = voices.find(v => v.lang.includes('hi') || v.lang.includes('en-IN'));
-      if (hindiVoice) {
-        utterance.voice = hindiVoice;
-      }
-      
-      speechSynthRef.current = utterance;
-      window.speechSynthesis.speak(utterance);
-    }
-  };
+  }, [aiMessage, isSpeaker, isAnswered]);
 
   const getAIResponse = async (userMessage?: string) => {
     setIsLoading(true);
@@ -114,7 +114,8 @@ export function FakeCallScreen({
         friend: "Hey! What's up? I was just thinking about you!",
         brother: "Hey, what's going on? You okay?"
       };
-      setAiMessage(fallbacks[persona] || "Hello? Can you hear me?");
+      const fallbackMessage = fallbacks[persona] || "Hello? Can you hear me?";
+      setAiMessage(fallbackMessage);
     } finally {
       setIsLoading(false);
     }
@@ -150,7 +151,7 @@ export function FakeCallScreen({
   };
 
   const handleEndCall = () => {
-    window.speechSynthesis.cancel();
+    stop();
     if (recognitionRef.current) {
       recognitionRef.current.stop();
     }
@@ -231,7 +232,10 @@ export function FakeCallScreen({
               {isMuted ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
             </button>
             <button
-              onClick={() => setIsSpeaker(!isSpeaker)}
+              onClick={() => {
+                setIsSpeaker(!isSpeaker);
+                if (isSpeaker) stop();
+              }}
               className={cn(
                 "p-4 rounded-full transition-all",
                 isSpeaker ? "bg-accent/20 text-accent" : "bg-muted text-muted-foreground"

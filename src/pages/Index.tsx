@@ -17,7 +17,7 @@ import { FakeCallSetup } from '@/components/FakeCallSetup';
 import { SafetyProvider, useSafety } from '@/contexts/SafetyContext';
 
 function Dashboard() {
-  const { isSafeMode, emergencyContacts } = useSafety();
+  const { isSafeMode, emergencyContacts, shareLocation, isSendingSMS } = useSafety();
   const [activeTab, setActiveTab] = useState('home');
   const [showFakeCallSetup, setShowFakeCallSetup] = useState(false);
   const [showFakeCall, setShowFakeCall] = useState(false);
@@ -45,13 +45,21 @@ function Dashboard() {
     setShowFakeCall(true);
   };
 
-  const handleShareLocation = () => {
+  const handleShareLocation = async () => {
+    // Send location via SMS to emergency contacts
+    await shareLocation();
+    
+    // Also try native share if available
     if (navigator.share) {
-      navigator.share({
-        title: 'My Location',
-        text: 'I am sharing my live location with you.',
-        url: window.location.href,
-      });
+      try {
+        await navigator.share({
+          title: 'My Location',
+          text: 'I am sharing my live location with you.',
+          url: window.location.href,
+        });
+      } catch (e) {
+        // User cancelled or share not supported
+      }
     }
   };
 
