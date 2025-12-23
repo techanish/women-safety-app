@@ -16,12 +16,20 @@ export function LocationMap() {
   const [mapLoaded, setMapLoaded] = useState(false);
   const [mapError, setMapError] = useState<string | null>(null);
 
+  // Validate Mapbox token format (public tokens start with 'pk.')
+  const isValidMapboxToken = (token: string): boolean => {
+    return /^pk\.[a-zA-Z0-9_-]{60,}$/.test(token.trim());
+  };
+
   const saveToken = () => {
-    if (mapboxToken.trim()) {
-      localStorage.setItem('mapbox_token', mapboxToken.trim());
+    const trimmedToken = mapboxToken.trim();
+    if (trimmedToken && isValidMapboxToken(trimmedToken)) {
+      localStorage.setItem('mapbox_token', trimmedToken);
       setShowTokenInput(false);
       setMapError(null);
       initializeMap();
+    } else if (trimmedToken) {
+      setMapError('Invalid Mapbox token format. Token should start with "pk."');
     }
   };
 
