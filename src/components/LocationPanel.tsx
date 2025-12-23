@@ -1,11 +1,46 @@
-import React from 'react';
-import { MapPin, Navigation, Share2, Shield, Plus, Building2, Home as HomeIcon, Briefcase } from 'lucide-react';
+import React, { useState } from 'react';
+import { MapPin, Navigation, Share2, Shield, Plus, Building2, Home as HomeIcon, Briefcase, GraduationCap, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSafety } from '@/contexts/SafetyContext';
+import { AddSafeZoneDialog } from '@/components/AddSafeZoneDialog';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
 export function LocationPanel() {
-  const { currentLocation, safeZones } = useSafety();
+  const { currentLocation, safeZones, shareLocation, isSendingSMS, removeSafeZone } = useSafety();
+  const [isAddSafeZoneOpen, setIsAddSafeZoneOpen] = useState(false);
+
+  const handleShareLocation = async () => {
+    if (!currentLocation) {
+      toast.error('Location not available yet');
+      return;
+    }
+    await shareLocation();
+  };
+
+  const openNearbyHelp = (type: 'police' | 'hospital') => {
+    if (!currentLocation) {
+      toast.error('Location not available. Please enable location services.');
+      return;
+    }
+    
+    const query = type === 'police' ? 'police+station' : 'hospital';
+    const url = `https://www.google.com/maps/search/${query}/@${currentLocation.latitude},${currentLocation.longitude},15z`;
+    window.open(url, '_blank');
+  };
+
+  const getZoneIcon = (name: string) => {
+    const lowerName = name.toLowerCase();
+    if (lowerName.includes('home')) return HomeIcon;
+    if (lowerName.includes('work') || lowerName.includes('office')) return Briefcase;
+    if (lowerName.includes('school') || lowerName.includes('college') || lowerName.includes('university')) return GraduationCap;
+    return Shield;
+  };
+
+  const handleDeleteZone = (id: string, name: string) => {
+    removeSafeZone(id);
+    toast.success(`Safe zone "${name}" removed`);
+  };
 
   return (
     <div className="flex flex-col h-full p-6 pb-24">
@@ -26,9 +61,15 @@ export function LocationPanel() {
             </p>
           </div>
         </div>
-        <Button variant="accent" size="sm" className="w-full">
+        <Button 
+          variant="accent" 
+          size="sm" 
+          className="w-full"
+          onClick={handleShareLocation}
+          disabled={isSendingSMS || !currentLocation}
+        >
           <Share2 className="w-4 h-4 mr-2" />
-          Share Live Location
+          {isSendingSMS ? 'Sharing...' : 'Share Live Location'}
         </Button>
       </div>
 
@@ -52,6 +93,16 @@ export function LocationPanel() {
             </div>
           </div>
         </div>
+        {currentLocation && (
+          <a
+            href={`https://www.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="absolute bottom-2 right-2 p-2 rounded-lg bg-background/80 hover:bg-background transition-colors"
+          >
+            <ExternalLink className="w-4 h-4 text-foreground" />
+          </a>
+        )}
       </div>
 
       {/* Safe Zones */}
@@ -60,7 +111,7 @@ export function LocationPanel() {
           <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
             Safe Zones
           </h3>
-          <Button variant="ghost" size="sm">
+          <Button variant="ghost" size="sm" onClick={() => setIsAddSafeZoneOpen(true)}>
             <Plus className="w-4 h-4 mr-1" />
             Add
           </Button>
@@ -73,25 +124,43 @@ export function LocationPanel() {
               <p className="text-sm text-muted-foreground">
                 No safe zones added yet. Add places like home or work.
               </p>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                className="mt-3"
+                onClick={() => setIsAddSafeZoneOpen(true)}
+              >
+                <Plus className="w-4 h-4 mr-1" />
+                Add Your First Safe Zone
+              </Button>
             </div>
           ) : (
-            safeZones.map(zone => (
-              <div key={zone.id} className="glass p-3 rounded-xl flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-safe/20">
-                  <HomeIcon className="w-4 h-4 text-safe" />
+            safeZones.map(zone => {
+              const ZoneIcon = getZoneIcon(zone.name);
+              return (
+                <div key={zone.id} className="glass p-3 rounded-xl flex items-center gap-3">
+                  <div className="p-2 rounded-lg bg-safe/20">
+                    <ZoneIcon className="w-4 h-4 text-safe" />
+                  </div>
+                  <div className="flex-1">
+                    <p className="font-medium text-foreground text-sm">{zone.name}</p>
+                    <p className="text-xs text-muted-foreground">{zone.radius}m radius</p>
+                  </div>
+                  <span className={cn(
+                    "text-xs px-2 py-1 rounded-full",
+                    zone.isActive ? "bg-safe/20 text-safe" : "bg-muted text-muted-foreground"
+                  )}>
+                    {zone.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                  <button
+                    onClick={() => handleDeleteZone(zone.id, zone.name)}
+                    className="p-1.5 rounded-lg hover:bg-destructive/20 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4 text-muted-foreground hover:text-destructive" />
+                  </button>
                 </div>
-                <div className="flex-1">
-                  <p className="font-medium text-foreground text-sm">{zone.name}</p>
-                  <p className="text-xs text-muted-foreground">{zone.radius}m radius</p>
-                </div>
-                <span className={cn(
-                  "text-xs px-2 py-1 rounded-full",
-                  zone.isActive ? "bg-safe/20 text-safe" : "bg-muted text-muted-foreground"
-                )}>
-                  {zone.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-            ))
+              );
+            })
           )}
         </div>
       </div>
@@ -102,16 +171,24 @@ export function LocationPanel() {
           Nearby Help
         </h3>
         <div className="grid grid-cols-2 gap-2">
-          <button className="glass p-3 rounded-xl flex items-center gap-2 hover:bg-card/90 transition-all">
+          <button 
+            onClick={() => openNearbyHelp('police')}
+            className="glass p-3 rounded-xl flex items-center gap-2 hover:bg-card/90 transition-all active:scale-95"
+          >
             <Building2 className="w-5 h-5 text-primary" />
             <span className="text-sm font-medium">Police</span>
           </button>
-          <button className="glass p-3 rounded-xl flex items-center gap-2 hover:bg-card/90 transition-all">
+          <button 
+            onClick={() => openNearbyHelp('hospital')}
+            className="glass p-3 rounded-xl flex items-center gap-2 hover:bg-card/90 transition-all active:scale-95"
+          >
             <Building2 className="w-5 h-5 text-safe" />
             <span className="text-sm font-medium">Hospital</span>
           </button>
         </div>
       </div>
+
+      <AddSafeZoneDialog open={isAddSafeZoneOpen} onOpenChange={setIsAddSafeZoneOpen} />
     </div>
   );
 }
