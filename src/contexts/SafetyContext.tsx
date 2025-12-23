@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert } from '@/types/safety';
+import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert, AlertHistory } from '@/types/safety';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -13,6 +13,7 @@ interface SafetyContextType {
   isSOSActive: boolean;
   isSafeMode: boolean;
   isSendingSMS: boolean;
+  alertHistory: AlertHistory[];
   
   // Actions
   setCurrentLocation: (location: Location) => void;
@@ -29,6 +30,7 @@ interface SafetyContextType {
   toggleSafeMode: () => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   shareLocation: () => Promise<void>;
+  addAlertToHistory: (alert: Omit<AlertHistory, 'id'>) => void;
 }
 
 const defaultSettings: AppSettings = {
@@ -53,16 +55,19 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [isSOSActive, setIsSOSActive] = useState(false);
   const [isSafeMode, setIsSafeMode] = useState(false);
   const [isSendingSMS, setIsSendingSMS] = useState(false);
+  const [alertHistory, setAlertHistory] = useState<AlertHistory[]>([]);
 
   // Load saved data from localStorage
   useEffect(() => {
     const savedContacts = localStorage.getItem('emergencyContacts');
     const savedSettings = localStorage.getItem('appSettings');
     const savedSafeZones = localStorage.getItem('safeZones');
+    const savedAlertHistory = localStorage.getItem('alertHistory');
     
     if (savedContacts) setEmergencyContacts(JSON.parse(savedContacts));
     if (savedSettings) setSettings({ ...defaultSettings, ...JSON.parse(savedSettings) });
     if (savedSafeZones) setSafeZones(JSON.parse(savedSafeZones));
+    if (savedAlertHistory) setAlertHistory(JSON.parse(savedAlertHistory));
   }, []);
 
   // Save to localStorage when data changes
@@ -77,6 +82,10 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     localStorage.setItem('safeZones', JSON.stringify(safeZones));
   }, [safeZones]);
+
+  useEffect(() => {
+    localStorage.setItem('alertHistory', JSON.stringify(alertHistory));
+  }, [alertHistory]);
 
   // Geolocation tracking
   useEffect(() => {
@@ -190,9 +199,28 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     setCheckInTimer(null);
   };
 
+  const addAlertToHistory = useCallback((alert: Omit<AlertHistory, 'id'>) => {
+    const newAlert: AlertHistory = {
+      ...alert,
+      id: crypto.randomUUID(),
+    };
+    setAlertHistory(prev => [newAlert, ...prev]);
+  }, []);
+
   const confirmSafe = () => {
+    // Update the most recent SOS alert as resolved
+    setAlertHistory(prev => {
+      const updated = [...prev];
+      const lastSOS = updated.find(a => a.type === 'sos' && !a.resolved);
+      if (lastSOS) {
+        lastSOS.resolved = true;
+        lastSOS.notes = 'Confirmed safe by user';
+      }
+      return updated;
+    });
     setCheckInTimer(null);
     setIsSOSActive(false);
+    toast.success('Marked as safe. Stay alert!');
   };
 
   const triggerSOS = async (type: SOSAlert['triggerType']) => {
@@ -200,17 +228,32 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     
     console.log('SOS Triggered:', type, currentLocation);
     
+    // Add to alert history
+    addAlertToHistory({
+      type: 'sos',
+      timestamp: Date.now(),
+      location: currentLocation || undefined,
+      resolved: false,
+      notes: `Triggered via ${type}`,
+    });
+    
     // Send SMS to emergency contacts
     await sendEmergencySMS(false);
-    
-    // Play siren if enabled
-    if (settings.sirenEnabled) {
-      // Siren would be played here
-    }
   };
 
   const cancelSOS = () => {
+    // Update the most recent SOS alert as cancelled
+    setAlertHistory(prev => {
+      const updated = [...prev];
+      const lastSOS = updated.find(a => a.type === 'sos' && !a.resolved);
+      if (lastSOS) {
+        lastSOS.resolved = true;
+        lastSOS.notes = 'Cancelled - False alarm';
+      }
+      return updated;
+    });
     setIsSOSActive(false);
+    toast.info('SOS cancelled');
   };
 
   const toggleSafeMode = () => {
@@ -236,6 +279,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         isSOSActive,
         isSafeMode,
         isSendingSMS,
+        alertHistory,
         setCurrentLocation,
         addEmergencyContact,
         removeEmergencyContact,
@@ -250,6 +294,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         toggleSafeMode,
         updateSettings,
         shareLocation,
+        addAlertToHistory,
       }}
     >
       {children}

@@ -2,17 +2,33 @@ import React, { useState, useEffect } from 'react';
 import { Phone, MapPin, Video, Volume2, VolumeX, X, CheckCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSafety } from '@/contexts/SafetyContext';
+import { useSiren } from '@/hooks/useSiren';
 import { cn } from '@/lib/utils';
 
 export function SOSActiveOverlay() {
-  const { isSOSActive, cancelSOS, currentLocation, emergencyContacts, confirmSafe } = useSafety();
+  const { isSOSActive, cancelSOS, currentLocation, emergencyContacts, confirmSafe, settings } = useSafety();
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sirenActive, setSirenActive] = useState(true);
   const [isRecording, setIsRecording] = useState(true);
+  const { startSiren, stopSiren } = useSiren();
+
+  // Handle siren
+  useEffect(() => {
+    if (isSOSActive && sirenActive && settings.sirenEnabled) {
+      startSiren();
+    } else {
+      stopSiren();
+    }
+    
+    return () => {
+      stopSiren();
+    };
+  }, [isSOSActive, sirenActive, settings.sirenEnabled, startSiren, stopSiren]);
 
   useEffect(() => {
     if (isSOSActive) {
       setElapsedTime(0);
+      setSirenActive(true);
       const interval = setInterval(() => {
         setElapsedTime(prev => prev + 1);
       }, 1000);
@@ -26,6 +42,15 @@ export function SOSActiveOverlay() {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const toggleSiren = () => {
+    if (sirenActive) {
+      stopSiren();
+    } else {
+      startSiren();
+    }
+    setSirenActive(!sirenActive);
   };
 
   const primaryContact = emergencyContacts.find(c => c.isPrimary);
@@ -136,7 +161,7 @@ export function SOSActiveOverlay() {
               <p className="text-sm text-muted-foreground">Loud alarm for attention</p>
             </div>
             <button
-              onClick={() => setSirenActive(!sirenActive)}
+              onClick={toggleSiren}
               className={cn(
                 "text-xs px-3 py-1 rounded-full transition-all",
                 sirenActive ? "bg-warning/20 text-warning" : "bg-muted text-muted-foreground"
