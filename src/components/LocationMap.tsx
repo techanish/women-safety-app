@@ -31,16 +31,12 @@ const darkMapStyles = [
   { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#17263c' }] },
 ];
 
-export function LocationMap() {
+// Separate component that only renders when API key is available
+function GoogleMapView({ apiKey }: { apiKey: string }) {
   const { currentLocation } = useSafety();
-  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(() => 
-    localStorage.getItem('google_maps_api_key') || ''
-  );
-  const [showKeyInput, setShowKeyInput] = useState(!googleMapsApiKey);
-  const [keyError, setKeyError] = useState<string | null>(null);
-
+  
   const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: googleMapsApiKey,
+    googleMapsApiKey: apiKey,
     id: 'google-map-script',
   });
 
@@ -66,111 +62,64 @@ export function LocationMap() {
     }
   }, [map, currentLocation]);
 
-  const saveApiKey = () => {
-    const trimmedKey = googleMapsApiKey.trim();
-    if (trimmedKey && trimmedKey.length > 20) {
-      localStorage.setItem('google_maps_api_key', trimmedKey);
-      setShowKeyInput(false);
-      setKeyError(null);
-      window.location.reload(); // Reload to reinitialize the loader
-    } else if (trimmedKey) {
-      setKeyError('Invalid API key format');
-    }
-  };
-
   if (loadError) {
     return (
-      <div className="relative w-full h-48 rounded-2xl overflow-hidden glass p-4">
-        <div className="flex flex-col gap-3 h-full justify-center items-center">
-          <AlertCircle className="w-8 h-8 text-destructive" />
-          <span className="text-sm text-muted-foreground">Failed to load Google Maps</span>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => {
-              localStorage.removeItem('google_maps_api_key');
-              setShowKeyInput(true);
-              setGoogleMapsApiKey('');
-            }}
-          >
-            Re-enter API Key
-          </Button>
-        </div>
+      <div className="absolute inset-0 flex flex-col gap-3 items-center justify-center p-4">
+        <AlertCircle className="w-8 h-8 text-destructive" />
+        <span className="text-sm text-muted-foreground">Failed to load Google Maps</span>
+        <Button 
+          variant="ghost" 
+          size="sm" 
+          onClick={() => {
+            localStorage.removeItem('google_maps_api_key');
+            window.location.reload();
+          }}
+        >
+          Re-enter API Key
+        </Button>
       </div>
     );
   }
 
-  if (showKeyInput) {
+  if (!isLoaded) {
     return (
-      <div className="relative w-full h-48 rounded-2xl overflow-hidden glass p-4">
-        <div className="flex flex-col gap-3 h-full justify-center">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">Enter Google Maps API key for live maps</span>
-          </div>
-          <Input
-            placeholder="AIzaSy..."
-            value={googleMapsApiKey}
-            onChange={(e) => setGoogleMapsApiKey(e.target.value)}
-            className="bg-muted/50"
-          />
-          <div className="flex gap-2">
-            <Button variant="accent" size="sm" onClick={saveApiKey} className="flex-1">
-              Save Key
-            </Button>
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => window.open('https://console.cloud.google.com/apis/credentials', '_blank')}
-            >
-              Get Key
-            </Button>
-          </div>
-          {keyError && (
-            <p className="text-xs text-destructive">{keyError}</p>
-          )}
-        </div>
+      <div className="absolute inset-0 bg-card flex items-center justify-center">
+        <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
       </div>
     );
   }
 
   return (
-    <div className="relative w-full h-48 rounded-2xl overflow-hidden glass">
-      {!isLoaded ? (
-        <div className="absolute inset-0 bg-card flex items-center justify-center">
-          <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
-        </div>
-      ) : (
-        <GoogleMap
-          mapContainerStyle={mapContainerStyle}
-          center={defaultCenter}
-          zoom={15}
-          onLoad={onLoad}
-          onUnmount={onUnmount}
-          options={{
-            styles: darkMapStyles,
-            disableDefaultUI: true,
-            zoomControl: true,
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: false,
-          }}
-        >
-          {currentLocation && (
-            <Marker
-              position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-              icon={{
-                path: google.maps.SymbolPath.CIRCLE,
-                scale: 8,
-                fillColor: '#f472b6',
-                fillOpacity: 1,
-                strokeColor: '#ffffff',
-                strokeWeight: 2,
-              }}
-            />
-          )}
-        </GoogleMap>
-      )}
+    <>
+      <GoogleMap
+        mapContainerStyle={mapContainerStyle}
+        center={defaultCenter}
+        zoom={15}
+        onLoad={onLoad}
+        onUnmount={onUnmount}
+        options={{
+          styles: darkMapStyles,
+          disableDefaultUI: true,
+          zoomControl: true,
+          mapTypeControl: false,
+          streetViewControl: false,
+          fullscreenControl: false,
+        }}
+      >
+        {currentLocation && (
+          <Marker
+            position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+            icon={{
+              path: google.maps.SymbolPath.CIRCLE,
+              scale: 8,
+              fillColor: '#f472b6',
+              fillOpacity: 1,
+              strokeColor: '#ffffff',
+              strokeWeight: 2,
+            }}
+          />
+        )}
+      </GoogleMap>
       
       {/* Location info overlay */}
       <div className="absolute bottom-0 left-0 right-0 p-3 bg-gradient-to-t from-card/90 to-transparent">
@@ -195,6 +144,66 @@ export function LocationMap() {
           </div>
         </div>
       </div>
+    </>
+  );
+}
+
+export function LocationMap() {
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(() => 
+    localStorage.getItem('google_maps_api_key') || ''
+  );
+  const [inputKey, setInputKey] = useState('');
+  const [keyError, setKeyError] = useState<string | null>(null);
+
+  const saveApiKey = () => {
+    const trimmedKey = inputKey.trim();
+    if (trimmedKey && trimmedKey.length > 20) {
+      localStorage.setItem('google_maps_api_key', trimmedKey);
+      setGoogleMapsApiKey(trimmedKey);
+      setKeyError(null);
+    } else if (trimmedKey) {
+      setKeyError('Invalid API key format');
+    }
+  };
+
+  // Show input if no API key stored
+  if (!googleMapsApiKey) {
+    return (
+      <div className="relative w-full h-48 rounded-2xl overflow-hidden glass p-4">
+        <div className="flex flex-col gap-3 h-full justify-center">
+          <div className="flex items-center gap-2 text-muted-foreground">
+            <AlertCircle className="w-4 h-4" />
+            <span className="text-sm">Enter Google Maps API key for live maps</span>
+          </div>
+          <Input
+            placeholder="AIzaSy..."
+            value={inputKey}
+            onChange={(e) => setInputKey(e.target.value)}
+            className="bg-muted/50"
+          />
+          <div className="flex gap-2">
+            <Button variant="accent" size="sm" onClick={saveApiKey} className="flex-1">
+              Save Key
+            </Button>
+            <Button 
+              variant="ghost" 
+              size="sm" 
+              onClick={() => window.open('https://console.cloud.google.com/apis/credentials', '_blank')}
+            >
+              Get Key
+            </Button>
+          </div>
+          {keyError && (
+            <p className="text-xs text-destructive">{keyError}</p>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative w-full h-48 rounded-2xl overflow-hidden glass">
+      <GoogleMapView apiKey={googleMapsApiKey} />
     </div>
   );
 }
