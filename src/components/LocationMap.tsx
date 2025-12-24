@@ -1,135 +1,133 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useState, useCallback } from 'react';
+import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { MapPin, Navigation, Share2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSafety } from '@/contexts/SafetyContext';
 
+const mapContainerStyle = {
+  width: '100%',
+  height: '100%',
+};
+
+const darkMapStyles = [
+  { elementType: 'geometry', stylers: [{ color: '#242f3e' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#242f3e' }] },
+  { elementType: 'labels.text.fill', stylers: [{ color: '#746855' }] },
+  { featureType: 'administrative.locality', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
+  { featureType: 'poi', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
+  { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#263c3f' }] },
+  { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#6b9a76' }] },
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#38414e' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#212a37' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9ca5b3' }] },
+  { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#746855' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#1f2835' }] },
+  { featureType: 'road.highway', elementType: 'labels.text.fill', stylers: [{ color: '#f3d19c' }] },
+  { featureType: 'transit', elementType: 'geometry', stylers: [{ color: '#2f3948' }] },
+  { featureType: 'transit.station', elementType: 'labels.text.fill', stylers: [{ color: '#d59563' }] },
+  { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#17263c' }] },
+  { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#515c6d' }] },
+  { featureType: 'water', elementType: 'labels.text.stroke', stylers: [{ color: '#17263c' }] },
+];
+
 export function LocationMap() {
   const { currentLocation } = useSafety();
-  const mapContainer = useRef<HTMLDivElement>(null);
-  const map = useRef<any>(null);
-  const marker = useRef<any>(null);
-  const [mapboxToken, setMapboxToken] = useState<string>(() => 
-    localStorage.getItem('mapbox_token') || ''
+  const [googleMapsApiKey, setGoogleMapsApiKey] = useState<string>(() => 
+    localStorage.getItem('google_maps_api_key') || ''
   );
-  const [showTokenInput, setShowTokenInput] = useState(!mapboxToken);
-  const [mapLoaded, setMapLoaded] = useState(false);
-  const [mapError, setMapError] = useState<string | null>(null);
+  const [showKeyInput, setShowKeyInput] = useState(!googleMapsApiKey);
+  const [keyError, setKeyError] = useState<string | null>(null);
 
-  // Validate Mapbox token format (public tokens start with 'pk.')
-  const isValidMapboxToken = (token: string): boolean => {
-    return /^pk\.[a-zA-Z0-9_-]{60,}$/.test(token.trim());
+  const { isLoaded, loadError } = useJsApiLoader({
+    googleMapsApiKey: googleMapsApiKey,
+    id: 'google-map-script',
+  });
+
+  const defaultCenter = {
+    lat: currentLocation?.latitude || 12.9716,
+    lng: currentLocation?.longitude || 77.5946,
   };
 
-  const saveToken = () => {
-    const trimmedToken = mapboxToken.trim();
-    if (trimmedToken && isValidMapboxToken(trimmedToken)) {
-      localStorage.setItem('mapbox_token', trimmedToken);
-      setShowTokenInput(false);
-      setMapError(null);
-      initializeMap();
-    } else if (trimmedToken) {
-      setMapError('Invalid Mapbox token format. Token should start with "pk."');
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+
+  const onLoad = useCallback((map: google.maps.Map) => {
+    setMap(map);
+  }, []);
+
+  const onUnmount = useCallback(() => {
+    setMap(null);
+  }, []);
+
+  // Update map center when location changes
+  React.useEffect(() => {
+    if (map && currentLocation) {
+      map.panTo({ lat: currentLocation.latitude, lng: currentLocation.longitude });
     }
-  };
+  }, [map, currentLocation]);
 
-  const initializeMap = async () => {
-    if (!mapContainer.current || !mapboxToken) return;
-
-    try {
-      const mapboxgl = await import('mapbox-gl');
-      await import('mapbox-gl/dist/mapbox-gl.css');
-      
-      mapboxgl.default.accessToken = mapboxToken;
-
-      const initialCenter: [number, number] = currentLocation 
-        ? [currentLocation.longitude, currentLocation.latitude]
-        : [77.5946, 12.9716]; // Default to Bangalore
-
-      map.current = new mapboxgl.default.Map({
-        container: mapContainer.current,
-        style: 'mapbox://styles/mapbox/dark-v11',
-        center: initialCenter,
-        zoom: 14,
-      });
-
-      map.current.addControl(
-        new mapboxgl.default.NavigationControl({ visualizePitch: true }),
-        'top-right'
-      );
-
-      // Add user location marker
-      const el = document.createElement('div');
-      el.className = 'w-4 h-4 bg-primary rounded-full border-2 border-white shadow-lg animate-pulse';
-      
-      marker.current = new mapboxgl.default.Marker(el)
-        .setLngLat(initialCenter)
-        .addTo(map.current);
-
-      map.current.on('load', () => {
-        setMapLoaded(true);
-      });
-
-      map.current.on('error', () => {
-        setMapError('Invalid Mapbox token');
-        localStorage.removeItem('mapbox_token');
-        setShowTokenInput(true);
-      });
-
-    } catch (error) {
-      console.error('Error loading map:', error);
-      setMapError('Failed to load map');
+  const saveApiKey = () => {
+    const trimmedKey = googleMapsApiKey.trim();
+    if (trimmedKey && trimmedKey.length > 20) {
+      localStorage.setItem('google_maps_api_key', trimmedKey);
+      setShowKeyInput(false);
+      setKeyError(null);
+      window.location.reload(); // Reload to reinitialize the loader
+    } else if (trimmedKey) {
+      setKeyError('Invalid API key format');
     }
   };
 
-  useEffect(() => {
-    if (mapboxToken && !showTokenInput) {
-      initializeMap();
-    }
+  if (loadError) {
+    return (
+      <div className="relative w-full h-48 rounded-2xl overflow-hidden glass p-4">
+        <div className="flex flex-col gap-3 h-full justify-center items-center">
+          <AlertCircle className="w-8 h-8 text-destructive" />
+          <span className="text-sm text-muted-foreground">Failed to load Google Maps</span>
+          <Button 
+            variant="ghost" 
+            size="sm" 
+            onClick={() => {
+              localStorage.removeItem('google_maps_api_key');
+              setShowKeyInput(true);
+              setGoogleMapsApiKey('');
+            }}
+          >
+            Re-enter API Key
+          </Button>
+        </div>
+      </div>
+    );
+  }
 
-    return () => {
-      if (map.current) {
-        map.current.remove();
-      }
-    };
-  }, [mapboxToken, showTokenInput]);
-
-  useEffect(() => {
-    if (currentLocation && marker.current && map.current) {
-      const coords: [number, number] = [currentLocation.longitude, currentLocation.latitude];
-      marker.current.setLngLat(coords);
-      map.current.flyTo({ center: coords, zoom: 15 });
-    }
-  }, [currentLocation]);
-
-  if (showTokenInput) {
+  if (showKeyInput) {
     return (
       <div className="relative w-full h-48 rounded-2xl overflow-hidden glass p-4">
         <div className="flex flex-col gap-3 h-full justify-center">
           <div className="flex items-center gap-2 text-muted-foreground">
             <AlertCircle className="w-4 h-4" />
-            <span className="text-sm">Enter Mapbox token for live maps</span>
+            <span className="text-sm">Enter Google Maps API key for live maps</span>
           </div>
           <Input
-            placeholder="pk.eyJ1Ijoi..."
-            value={mapboxToken}
-            onChange={(e) => setMapboxToken(e.target.value)}
+            placeholder="AIzaSy..."
+            value={googleMapsApiKey}
+            onChange={(e) => setGoogleMapsApiKey(e.target.value)}
             className="bg-muted/50"
           />
           <div className="flex gap-2">
-            <Button variant="accent" size="sm" onClick={saveToken} className="flex-1">
-              Save Token
+            <Button variant="accent" size="sm" onClick={saveApiKey} className="flex-1">
+              Save Key
             </Button>
             <Button 
               variant="ghost" 
               size="sm" 
-              onClick={() => window.open('https://mapbox.com/', '_blank')}
+              onClick={() => window.open('https://console.cloud.google.com/apis/credentials', '_blank')}
             >
-              Get Token
+              Get Key
             </Button>
           </div>
-          {mapError && (
-            <p className="text-xs text-destructive">{mapError}</p>
+          {keyError && (
+            <p className="text-xs text-destructive">{keyError}</p>
           )}
         </div>
       </div>
@@ -138,12 +136,40 @@ export function LocationMap() {
 
   return (
     <div className="relative w-full h-48 rounded-2xl overflow-hidden glass">
-      <div ref={mapContainer} className="absolute inset-0" />
-      
-      {!mapLoaded && (
+      {!isLoaded ? (
         <div className="absolute inset-0 bg-card flex items-center justify-center">
           <div className="w-8 h-8 border-2 border-primary border-t-transparent rounded-full animate-spin" />
         </div>
+      ) : (
+        <GoogleMap
+          mapContainerStyle={mapContainerStyle}
+          center={defaultCenter}
+          zoom={15}
+          onLoad={onLoad}
+          onUnmount={onUnmount}
+          options={{
+            styles: darkMapStyles,
+            disableDefaultUI: true,
+            zoomControl: true,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+          }}
+        >
+          {currentLocation && (
+            <Marker
+              position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
+              icon={{
+                path: google.maps.SymbolPath.CIRCLE,
+                scale: 8,
+                fillColor: '#f472b6',
+                fillOpacity: 1,
+                strokeColor: '#ffffff',
+                strokeWeight: 2,
+              }}
+            />
+          )}
+        </GoogleMap>
       )}
       
       {/* Location info overlay */}
