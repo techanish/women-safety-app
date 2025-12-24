@@ -8,12 +8,14 @@ import {
   Bell,
   Languages,
   Shield,
-  ChevronRight
+  ChevronRight,
+  User
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSafety } from '@/contexts/SafetyContext';
 import { cn } from '@/lib/utils';
 import { VoiceKeywordsDialog, NotificationsDialog, PrivacyDialog } from './SettingsDialogs';
+import { ProfileSettings } from './ProfileSettings';
 
 interface SettingItemProps {
   icon: React.ReactNode;
@@ -51,6 +53,11 @@ export function SettingsPanel() {
   const [showVoiceKeywords, setShowVoiceKeywords] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
+  const [showProfile, setShowProfile] = useState(false);
+
+  if (showProfile) {
+    return <ProfileSettings onClose={() => setShowProfile(false)} />;
+  }
 
   return (
     <div className="flex flex-col h-full p-6 pb-24">
