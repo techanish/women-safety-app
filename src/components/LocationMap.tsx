@@ -62,14 +62,22 @@ function GoogleMapView({ apiKey }: { apiKey: string }) {
     }
   }, [map, currentLocation]);
 
-  if (loadError) {
+   if (loadError) {
     return (
-      <div className="absolute inset-0 flex flex-col gap-3 items-center justify-center p-4">
+      <div className="absolute inset-0 flex flex-col gap-3 items-center justify-center p-4 text-center">
         <AlertCircle className="w-8 h-8 text-destructive" />
-        <span className="text-sm text-muted-foreground">Failed to load Google Maps</span>
-        <Button 
-          variant="ghost" 
-          size="sm" 
+        <div className="space-y-1">
+          <p className="text-sm text-foreground">Google Maps failed to load</p>
+          <p className="text-xs text-muted-foreground">
+            {String((loadError as any)?.message || loadError)}
+          </p>
+          <p className="text-xs text-muted-foreground">
+            Make sure your Maps JavaScript API is enabled, billing is on, and this site URL is allowed in your API key referrers.
+          </p>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => {
             localStorage.removeItem('google_maps_api_key');
             window.location.reload();
