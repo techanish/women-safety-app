@@ -4,6 +4,7 @@ import { MapPin, Navigation, Share2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { useSafety } from '@/contexts/SafetyContext';
+import { getGoogleMapsLoaderOptions } from '@/lib/googleMaps';
 
 const mapContainerStyle = {
   width: '100%',
@@ -35,10 +36,7 @@ const darkMapStyles = [
 function GoogleMapView({ apiKey }: { apiKey: string }) {
   const { currentLocation } = useSafety();
   
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: apiKey,
-    id: 'google-map-script',
-  });
+  const { isLoaded, loadError } = useJsApiLoader(getGoogleMapsLoaderOptions(apiKey));
 
   const defaultCenter = {
     lat: currentLocation?.latitude || 12.9716,

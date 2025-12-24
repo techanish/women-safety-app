@@ -5,9 +5,9 @@ import { Input } from '@/components/ui/input';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { useSafety } from '@/contexts/SafetyContext';
 import { useSafeRoute } from '@/hooks/useSafeRoute';
+import { SafeRouteMap } from '@/components/SafeRouteMap';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
 export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
   const { currentLocation, triggerSOS } = useSafety();
   const [routeName, setRouteName] = useState('');
@@ -26,6 +26,7 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
     isSettingRoute,
     tempWaypoints,
     startSettingRoute,
+    addWaypoint,
     addCurrentLocationAsWaypoint,
     cancelSettingRoute,
     saveRoute,
@@ -118,8 +119,19 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
                   {tempWaypoints.length} waypoints
                 </span>
               </div>
-              
-              <div className="space-y-2 max-h-48 overflow-y-auto mb-4">
+
+              <div className="relative h-56 mb-4">
+                <SafeRouteMap
+                  currentLocation={currentLocation}
+                  waypoints={tempWaypoints}
+                  onAddWaypoint={(lat, lng) => {
+                    addWaypoint(lat, lng);
+                    toast.success('Waypoint added');
+                  }}
+                />
+              </div>
+
+              <div className="space-y-2 max-h-40 overflow-y-auto mb-4">
                 {tempWaypoints.map((wp, index) => (
                   <div key={index} className="flex items-center gap-2 p-2 rounded-lg bg-muted/50">
                     <MapPin className="w-4 h-4 text-accent" />
@@ -141,7 +153,7 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
               </Button>
 
               <p className="text-xs text-muted-foreground text-center">
-                Walk to each point on your route and tap "Add Current Location"
+                Tip: Tap the map to add points, or use “Add Current Location” while you walk.
               </p>
             </div>
 
@@ -149,8 +161,8 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
               <Button variant="outline" className="flex-1" onClick={cancelSettingRoute}>
                 Cancel
               </Button>
-              <Button 
-                variant="default" 
+              <Button
+                variant="default"
                 className="flex-1"
                 onClick={handleSaveRoute}
                 disabled={tempWaypoints.length < 2}
