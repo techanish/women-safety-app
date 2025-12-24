@@ -3,6 +3,7 @@ import { MapPin, Navigation, Share2, Shield, Plus, Building2, Home as HomeIcon, 
 import { Button } from '@/components/ui/button';
 import { useSafety } from '@/contexts/SafetyContext';
 import { AddSafeZoneDialog } from '@/components/AddSafeZoneDialog';
+import { LocationMap } from '@/components/LocationMap';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
@@ -73,38 +74,10 @@ export function LocationPanel() {
         </Button>
       </div>
 
-      {/* Map placeholder */}
-      <div className="relative h-48 rounded-2xl overflow-hidden glass mb-6">
-        <div className="absolute inset-0 bg-gradient-to-br from-navy-light to-navy">
-          <div 
-            className="absolute inset-0 opacity-10"
-            style={{
-              backgroundImage: `
-                linear-gradient(to right, hsl(var(--border)) 1px, transparent 1px),
-                linear-gradient(to bottom, hsl(var(--border)) 1px, transparent 1px)
-              `,
-              backgroundSize: '30px 30px'
-            }}
-          />
-          <div className="absolute inset-0 flex items-center justify-center">
-            <div className="relative">
-              <div className="absolute inset-0 -m-6 rounded-full bg-accent/20 animate-pulse" />
-              <div className="w-3 h-3 rounded-full bg-accent shadow-lg shadow-accent/50" />
-            </div>
-          </div>
-        </div>
-        {currentLocation && (
-          <a
-            href={`https://www.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="absolute bottom-2 right-2 p-2 rounded-lg bg-background/80 hover:bg-background transition-colors"
-          >
-            <ExternalLink className="w-4 h-4 text-foreground" />
-          </a>
-        )}
+      {/* Live map */}
+      <div className="mb-6">
+        <LocationMap />
       </div>
-
       {/* Safe Zones */}
       <div className="mb-4">
         <div className="flex items-center justify-between mb-3">
