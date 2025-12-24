@@ -1,16 +1,50 @@
-import React, { useState, useEffect } from 'react';
-import { Phone, MapPin, Video, Volume2, VolumeX, X, CheckCircle } from 'lucide-react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { Phone, MapPin, Video, Volume2, VolumeX, CheckCircle, Mic, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSafety } from '@/contexts/SafetyContext';
 import { useSiren } from '@/hooks/useSiren';
+import { useMediaRecorder } from '@/hooks/useMediaRecorder';
 import { cn } from '@/lib/utils';
+import { AlertRecording } from '@/types/safety';
 
 export function SOSActiveOverlay() {
-  const { isSOSActive, cancelSOS, currentLocation, emergencyContacts, confirmSafe, settings } = useSafety();
+  const { 
+    isSOSActive, 
+    cancelSOS, 
+    currentLocation, 
+    emergencyContacts, 
+    confirmSafe, 
+    settings,
+    currentAlertId,
+    updateAlertRecordings,
+    getGoogleMapsUrl
+  } = useSafety();
+  
   const [elapsedTime, setElapsedTime] = useState(0);
   const [sirenActive, setSirenActive] = useState(true);
-  const [isRecording, setIsRecording] = useState(true);
   const { startSiren, stopSiren } = useSiren();
+  const { 
+    isRecording, 
+    duration, 
+    startRecording, 
+    stopRecording,
+    audioUrl,
+    videoUrl
+  } = useMediaRecorder();
+
+  const [recordingType, setRecordingType] = useState<'video' | 'audio'>('video');
+
+  // Start recording when SOS is activated
+  useEffect(() => {
+    if (isSOSActive && currentAlertId && !isRecording) {
+      // Start video recording by default
+      startRecording(currentAlertId, true).catch(() => {
+        // If video fails, try audio only
+        startRecording(currentAlertId, false);
+        setRecordingType('audio');
+      });
+    }
+  }, [isSOSActive, currentAlertId, isRecording, startRecording]);
 
   // Handle siren
   useEffect(() => {
@@ -36,6 +70,50 @@ export function SOSActiveOverlay() {
     }
   }, [isSOSActive]);
 
+  // Save recordings when SOS ends
+  const handleStopSOS = useCallback(async (isSafe: boolean) => {
+    // Stop recording and save
+    stopRecording();
+    
+    // Create recording entries for alert history
+    if (currentAlertId && (audioUrl || videoUrl)) {
+      const recordings: AlertRecording[] = [];
+      
+      if (videoUrl) {
+        recordings.push({
+          id: crypto.randomUUID(),
+          type: 'video',
+          url: videoUrl,
+          duration: duration,
+          timestamp: Date.now() - (duration * 1000),
+        });
+      }
+      
+      if (audioUrl) {
+        recordings.push({
+          id: crypto.randomUUID(),
+          type: 'audio',
+          url: audioUrl,
+          duration: duration,
+          timestamp: Date.now() - (duration * 1000),
+        });
+      }
+      
+      if (recordings.length > 0) {
+        updateAlertRecordings(currentAlertId, recordings);
+      }
+    }
+    
+    // Stop siren
+    stopSiren();
+    
+    if (isSafe) {
+      confirmSafe();
+    } else {
+      cancelSOS();
+    }
+  }, [currentAlertId, audioUrl, videoUrl, duration, stopRecording, stopSiren, updateAlertRecordings, confirmSafe, cancelSOS]);
+
   if (!isSOSActive) return null;
 
   const formatTime = (seconds: number) => {
@@ -54,6 +132,7 @@ export function SOSActiveOverlay() {
   };
 
   const primaryContact = emergencyContacts.find(c => c.isPrimary);
+  const googleMapsUrl = getGoogleMapsUrl();
 
   return (
     <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-xl flex flex-col">
@@ -97,6 +176,16 @@ export function SOSActiveOverlay() {
                   : 'Acquiring location...'}
               </p>
             </div>
+            {googleMapsUrl && (
+              <a
+                href={googleMapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="p-2 rounded-lg bg-accent/20 hover:bg-accent/30 transition-colors"
+              >
+                <ExternalLink className="w-4 h-4 text-accent" />
+              </a>
+            )}
             <span className="text-xs px-2 py-1 rounded-full bg-safe/20 text-safe">
               Live
             </span>
@@ -114,7 +203,7 @@ export function SOSActiveOverlay() {
               </p>
             </div>
             <span className="text-xs px-2 py-1 rounded-full bg-warning/20 text-warning">
-              Calling...
+              Notified
             </span>
           </div>
 
@@ -124,24 +213,37 @@ export function SOSActiveOverlay() {
               "p-2 rounded-lg",
               isRecording ? "bg-primary/20" : "bg-muted"
             )}>
-              <Video className={cn(
-                "w-5 h-5",
-                isRecording ? "text-primary" : "text-muted-foreground"
-              )} />
+              {recordingType === 'video' ? (
+                <Video className={cn(
+                  "w-5 h-5",
+                  isRecording ? "text-primary" : "text-muted-foreground"
+                )} />
+              ) : (
+                <Mic className={cn(
+                  "w-5 h-5",
+                  isRecording ? "text-primary" : "text-muted-foreground"
+                )} />
+              )}
             </div>
             <div className="flex-1">
               <p className="font-medium text-foreground">Recording</p>
-              <p className="text-sm text-muted-foreground">Audio & video evidence</p>
+              <p className="text-sm text-muted-foreground">
+                {recordingType === 'video' ? 'Audio & video evidence' : 'Audio evidence'}
+              </p>
             </div>
-            <button
-              onClick={() => setIsRecording(!isRecording)}
-              className={cn(
+            <div className="flex items-center gap-2">
+              {isRecording && (
+                <span className="text-xs text-muted-foreground">
+                  {formatTime(duration)}
+                </span>
+              )}
+              <span className={cn(
                 "text-xs px-2 py-1 rounded-full transition-all",
                 isRecording ? "bg-primary/20 text-primary" : "bg-muted text-muted-foreground"
-              )}
-            >
-              {isRecording ? 'Recording' : 'Paused'}
-            </button>
+              )}>
+                {isRecording ? 'Recording' : 'Stopped'}
+              </span>
+            </div>
           </div>
 
           {/* Siren */}
@@ -179,7 +281,7 @@ export function SOSActiveOverlay() {
             variant="safe"
             size="xl"
             className="w-full"
-            onClick={confirmSafe}
+            onClick={() => handleStopSOS(true)}
           >
             <CheckCircle className="w-5 h-5 mr-2" />
             I'm Safe Now
@@ -188,7 +290,7 @@ export function SOSActiveOverlay() {
             variant="outline"
             size="lg"
             className="w-full"
-            onClick={cancelSOS}
+            onClick={() => handleStopSOS(false)}
           >
             Cancel SOS (False Alarm)
           </Button>

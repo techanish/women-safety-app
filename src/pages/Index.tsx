@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SOSButton } from '@/components/SOSButton';
@@ -14,10 +14,24 @@ import { AlertHistory } from '@/components/AlertHistory';
 import { LocationPanel } from '@/components/LocationPanel';
 import { SOSActiveOverlay } from '@/components/SOSActiveOverlay';
 import { FakeCallSetup } from '@/components/FakeCallSetup';
+import { SafeRoutePanel } from '@/components/SafeRoutePanel';
 import { SafetyProvider, useSafety } from '@/contexts/SafetyContext';
+import { useVoiceDetection } from '@/hooks/useVoiceDetection';
+import { toast } from 'sonner';
 
 function Dashboard() {
-  const { isSafeMode, emergencyContacts, shareLocation, isSendingSMS } = useSafety();
+  const { 
+    isSafeMode, 
+    emergencyContacts, 
+    shareLocation, 
+    isSendingSMS, 
+    voiceDetectionEnabled, 
+    settings, 
+    triggerSOS,
+    isInSafeZone,
+    currentSafeZone 
+  } = useSafety();
+  
   const [activeTab, setActiveTab] = useState('home');
   const [showFakeCallSetup, setShowFakeCallSetup] = useState(false);
   const [showFakeCall, setShowFakeCall] = useState(false);
@@ -33,6 +47,19 @@ function Dashboard() {
   });
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
+  const [showSafeRoute, setShowSafeRoute] = useState(false);
+
+  // Voice detection for SOS trigger words
+  const handleKeywordDetected = useCallback((keyword: string) => {
+    toast.error(`SOS keyword detected: "${keyword}"`);
+    triggerSOS('voice');
+  }, [triggerSOS]);
+
+  useVoiceDetection({
+    keywords: settings.voiceKeywords,
+    onKeywordDetected: handleKeywordDetected,
+    enabled: voiceDetectionEnabled && !isSafeMode,
+  });
 
   const handleFakeCallSetup = () => {
     setShowFakeCallSetup(true);
@@ -46,29 +73,21 @@ function Dashboard() {
   };
 
   const handleShareLocation = async () => {
-    // Send location via SMS to emergency contacts
     await shareLocation();
-    
-    // Also try native share if available
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: 'My Location',
-          text: 'I am sharing my live location with you.',
-          url: window.location.href,
-        });
-      } catch (e) {
-        // User cancelled or share not supported
-      }
-    }
   };
 
   const handleSafeRoute = () => {
-    // Safe route logic
+    setShowSafeRoute(true);
   };
 
   const handleNearby = () => {
-    // Nearby help logic
+    // Open Google Maps search for nearby police stations, hospitals
+    if (navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((position) => {
+        const { latitude, longitude } = position.coords;
+        window.open(`https://www.google.com/maps/search/police+station+OR+hospital/@${latitude},${longitude},14z`, '_blank');
+      });
+    }
   };
 
   const renderContent = () => {
@@ -89,10 +108,15 @@ function Dashboard() {
                   SafeHer
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {isSafeMode ? 'Protected mode active' : 'Your safety companion'}
+                  {isSafeMode ? 'Protected mode active' : isInSafeZone ? `In safe zone: ${currentSafeZone?.name}` : 'Your safety companion'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                {voiceDetectionEnabled && !isSafeMode && (
+                  <span className="text-xs px-2 py-1 rounded-full bg-accent/20 text-accent">
+                    🎤 Listening
+                  </span>
+                )}
                 <Button variant="ghost" size="icon" className="relative">
                   <Bell className="w-5 h-5" />
                   <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary" />
@@ -191,6 +215,11 @@ function Dashboard() {
       {/* Emergency Contacts */}
       {showContacts && (
         <EmergencyContacts onClose={() => setShowContacts(false)} />
+      )}
+
+      {/* Safe Route Panel */}
+      {showSafeRoute && (
+        <SafeRoutePanel onClose={() => setShowSafeRoute(false)} />
       )}
     </div>
   );

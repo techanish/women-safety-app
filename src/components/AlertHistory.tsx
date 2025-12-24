@@ -1,5 +1,5 @@
 import React from 'react';
-import { AlertTriangle, CheckCircle, MapPin, Clock, Trash2 } from 'lucide-react';
+import { AlertTriangle, CheckCircle, MapPin, Clock, Play, Video, Mic, ExternalLink, Route } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useSafety } from '@/contexts/SafetyContext';
 import { Button } from '@/components/ui/button';
@@ -17,6 +17,12 @@ export function AlertHistory() {
     });
   };
 
+  const formatDuration = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
   const getIcon = (type: string) => {
     switch (type) {
       case 'sos':
@@ -25,6 +31,8 @@ export function AlertHistory() {
         return <Clock className="w-5 h-5 text-accent" />;
       case 'safezone':
         return <MapPin className="w-5 h-5 text-warning" />;
+      case 'route_deviation':
+        return <Route className="w-5 h-5 text-primary" />;
       default:
         return <CheckCircle className="w-5 h-5 text-safe" />;
     }
@@ -40,6 +48,8 @@ export function AlertHistory() {
         return 'Safe Zone Alert';
       case 'lowbattery':
         return 'Low Battery Alert';
+      case 'route_deviation':
+        return 'Route Deviation';
       default:
         return 'Alert';
     }
@@ -77,6 +87,7 @@ export function AlertHistory() {
                     alert.type === 'sos' && "bg-primary/20",
                     alert.type === 'checkin' && "bg-accent/20",
                     alert.type === 'safezone' && "bg-warning/20",
+                    alert.type === 'route_deviation' && "bg-primary/20",
                     alert.type === 'lowbattery' && "bg-muted"
                   )}>
                     {getIcon(alert.type)}
@@ -100,12 +111,56 @@ export function AlertHistory() {
                       {formatDate(alert.timestamp)}
                     </p>
                     {alert.location && (
-                      <p className="text-xs text-muted-foreground mb-1">
-                        📍 {alert.location.latitude.toFixed(4)}, {alert.location.longitude.toFixed(4)}
-                      </p>
+                      <div className="flex items-center gap-2 mb-1">
+                        <p className="text-xs text-muted-foreground">
+                          📍 {alert.location.latitude.toFixed(4)}, {alert.location.longitude.toFixed(4)}
+                        </p>
+                        {alert.googleMapsUrl && (
+                          <a
+                            href={alert.googleMapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-accent hover:underline flex items-center gap-1"
+                          >
+                            <ExternalLink className="w-3 h-3" />
+                            View Map
+                          </a>
+                        )}
+                      </div>
                     )}
                     {alert.notes && (
                       <p className="text-sm text-foreground/80">{alert.notes}</p>
+                    )}
+                    
+                    {/* Recordings */}
+                    {alert.recordings && alert.recordings.length > 0 && (
+                      <div className="mt-3 space-y-2">
+                        <p className="text-xs font-medium text-muted-foreground uppercase">Recordings</p>
+                        <div className="flex flex-wrap gap-2">
+                          {alert.recordings.map((recording) => (
+                            <a
+                              key={recording.id}
+                              href={recording.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="flex items-center gap-2 px-3 py-2 rounded-lg bg-muted/50 hover:bg-muted transition-colors"
+                            >
+                              {recording.type === 'video' ? (
+                                <Video className="w-4 h-4 text-accent" />
+                              ) : (
+                                <Mic className="w-4 h-4 text-accent" />
+                              )}
+                              <span className="text-xs text-foreground">
+                                {recording.type === 'video' ? 'Video' : 'Audio'}
+                              </span>
+                              <span className="text-xs text-muted-foreground">
+                                {formatDuration(recording.duration)}
+                              </span>
+                              <Play className="w-3 h-3 text-muted-foreground" />
+                            </a>
+                          ))}
+                        </div>
+                      </div>
                     )}
                   </div>
                 </div>
