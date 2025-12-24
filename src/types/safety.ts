@@ -61,9 +61,19 @@ export interface AppSettings {
 
 export interface AlertHistory {
   id: string;
-  type: 'sos' | 'checkin' | 'safezone' | 'lowbattery';
+  type: 'sos' | 'checkin' | 'safezone' | 'lowbattery' | 'route_deviation';
   timestamp: number;
   location?: Location;
   resolved: boolean;
   notes?: string;
+  recordings?: AlertRecording[];
+  googleMapsUrl?: string;
+}
+
+export interface AlertRecording {
+  id: string;
+  type: 'audio' | 'video';
+  url: string;
+  duration: number;
+  timestamp: number;
 }

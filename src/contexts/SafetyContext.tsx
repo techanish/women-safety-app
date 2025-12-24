@@ -1,7 +1,8 @@
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
-import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert, AlertHistory } from '@/types/safety';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
+import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert, AlertHistory, AlertRecording } from '@/types/safety';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useGeofencing } from '@/hooks/useGeofencing';
 
 interface SafetyContextType {
   // State
@@ -14,6 +15,10 @@ interface SafetyContextType {
   isSafeMode: boolean;
   isSendingSMS: boolean;
   alertHistory: AlertHistory[];
+  currentAlertId: string | null;
+  isInSafeZone: boolean;
+  currentSafeZone: SafeZone | null;
+  voiceDetectionEnabled: boolean;
   
   // Actions
   setCurrentLocation: (location: Location) => void;
@@ -28,15 +33,18 @@ interface SafetyContextType {
   triggerSOS: (type: SOSAlert['triggerType']) => void;
   cancelSOS: () => void;
   toggleSafeMode: () => void;
+  setSafeMode: (value: boolean) => void;
   updateSettings: (settings: Partial<AppSettings>) => void;
   shareLocation: () => Promise<void>;
-  addAlertToHistory: (alert: Omit<AlertHistory, 'id'>) => void;
+  addAlertToHistory: (alert: Omit<AlertHistory, 'id'>) => string;
+  updateAlertRecordings: (alertId: string, recordings: AlertRecording[]) => void;
+  getGoogleMapsUrl: () => string | null;
 }
 
 const defaultSettings: AppSettings = {
   voiceCommandEnabled: true,
   shakeDetectionEnabled: true,
-  voiceKeywords: ['Help me', 'Save me', 'बचाओ', 'मदद'],
+  voiceKeywords: ['Help me', 'Save me', 'बचाओ', 'मदद', 'Bachao', 'Help'],
   language: 'en',
   sirenEnabled: true,
   backgroundTrackingEnabled: true,
@@ -56,6 +64,31 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [isSafeMode, setIsSafeMode] = useState(false);
   const [isSendingSMS, setIsSendingSMS] = useState(false);
   const [alertHistory, setAlertHistory] = useState<AlertHistory[]>([]);
+  const [currentAlertId, setCurrentAlertId] = useState<string | null>(null);
+  const [voiceDetectionEnabled, setVoiceDetectionEnabled] = useState(false);
+
+  // Geofencing integration
+  const handleEnterSafeZone = useCallback((zone: SafeZone) => {
+    toast.success(`Entered safe zone: ${zone.name}`);
+    setIsSafeMode(true);
+    setVoiceDetectionEnabled(false);
+  }, []);
+
+  const handleExitSafeZone = useCallback((zone: SafeZone) => {
+    toast.warning(`Left safe zone: ${zone.name}`);
+    setIsSafeMode(false);
+    // Enable voice detection when outside safe zone
+    if (settings.voiceCommandEnabled) {
+      setVoiceDetectionEnabled(true);
+    }
+  }, [settings.voiceCommandEnabled]);
+
+  const { isInSafeZone, currentSafeZone } = useGeofencing({
+    currentLocation,
+    safeZones,
+    onEnterSafeZone: handleEnterSafeZone,
+    onExitSafeZone: handleExitSafeZone,
+  });
 
   // Load saved data from localStorage
   useEffect(() => {
@@ -107,6 +140,19 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // Enable voice detection on startup if not in safe zone
+  useEffect(() => {
+    if (!isInSafeZone && settings.voiceCommandEnabled && !isSafeMode) {
+      setVoiceDetectionEnabled(true);
+    }
+  }, [isInSafeZone, settings.voiceCommandEnabled, isSafeMode]);
+
+  // Get Google Maps URL for current location
+  const getGoogleMapsUrl = useCallback(() => {
+    if (!currentLocation) return null;
+    return `https://www.google.com/maps?q=${currentLocation.latitude},${currentLocation.longitude}`;
+  }, [currentLocation]);
+
   // Send SMS to emergency contacts
   const sendEmergencySMS = useCallback(async (isLiveLocation = false) => {
     if (emergencyContacts.length === 0) {
@@ -118,21 +164,18 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     
     try {
       const phoneNumbers = emergencyContacts.map(c => c.phone);
+      const googleMapsUrl = getGoogleMapsUrl();
+      
       const message = isLiveLocation 
-        ? `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.`
-        : `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.`;
-
-      // Generate a live location tracking URL (using Google Maps for simplicity)
-      const liveLocationUrl = currentLocation 
-        ? `https://maps.google.com/?q=${currentLocation.latitude},${currentLocation.longitude}`
-        : undefined;
+        ? `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.\n\n${googleMapsUrl ? `📍 View my location: ${googleMapsUrl}` : ''}`
+        : `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.\n\n${googleMapsUrl ? `📍 My current location: ${googleMapsUrl}` : ''}`;
 
       const { data, error } = await supabase.functions.invoke('send-sms', {
         body: {
           phoneNumbers,
           message,
           location: currentLocation,
-          liveLocationUrl,
+          liveLocationUrl: googleMapsUrl,
         },
       });
 
@@ -151,7 +194,7 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     } finally {
       setIsSendingSMS(false);
     }
-  }, [emergencyContacts, currentLocation]);
+  }, [emergencyContacts, currentLocation, getGoogleMapsUrl]);
 
   const addEmergencyContact = (contact: Omit<EmergencyContact, 'id'>) => {
     const newContact: EmergencyContact = {
@@ -199,12 +242,26 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     setCheckInTimer(null);
   };
 
-  const addAlertToHistory = useCallback((alert: Omit<AlertHistory, 'id'>) => {
+  const addAlertToHistory = useCallback((alert: Omit<AlertHistory, 'id'>): string => {
+    const alertId = crypto.randomUUID();
+    const googleMapsUrl = getGoogleMapsUrl();
     const newAlert: AlertHistory = {
       ...alert,
-      id: crypto.randomUUID(),
+      id: alertId,
+      googleMapsUrl: googleMapsUrl || undefined,
     };
     setAlertHistory(prev => [newAlert, ...prev]);
+    return alertId;
+  }, [getGoogleMapsUrl]);
+
+  const updateAlertRecordings = useCallback((alertId: string, recordings: AlertRecording[]) => {
+    setAlertHistory(prev => 
+      prev.map(alert => 
+        alert.id === alertId 
+          ? { ...alert, recordings } 
+          : alert
+      )
+    );
   }, []);
 
   const confirmSafe = () => {
@@ -220,16 +277,19 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     });
     setCheckInTimer(null);
     setIsSOSActive(false);
+    setCurrentAlertId(null);
     toast.success('Marked as safe. Stay alert!');
   };
 
-  const triggerSOS = async (type: SOSAlert['triggerType']) => {
+  const triggerSOS = useCallback(async (type: SOSAlert['triggerType']) => {
+    if (isSOSActive) return; // Prevent multiple SOS triggers
+    
     setIsSOSActive(true);
     
     console.log('SOS Triggered:', type, currentLocation);
     
-    // Add to alert history
-    addAlertToHistory({
+    // Add to alert history and get the alert ID
+    const alertId = addAlertToHistory({
       type: 'sos',
       timestamp: Date.now(),
       location: currentLocation || undefined,
@@ -237,9 +297,11 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       notes: `Triggered via ${type}`,
     });
     
+    setCurrentAlertId(alertId);
+    
     // Send SMS to emergency contacts
     await sendEmergencySMS(false);
-  };
+  }, [isSOSActive, currentLocation, addAlertToHistory, sendEmergencySMS]);
 
   const cancelSOS = () => {
     // Update the most recent SOS alert as cancelled
@@ -253,11 +315,29 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
       return updated;
     });
     setIsSOSActive(false);
+    setCurrentAlertId(null);
     toast.info('SOS cancelled');
   };
 
   const toggleSafeMode = () => {
-    setIsSafeMode(prev => !prev);
+    setIsSafeMode(prev => {
+      const newValue = !prev;
+      if (newValue) {
+        setVoiceDetectionEnabled(false);
+      } else if (settings.voiceCommandEnabled && !isInSafeZone) {
+        setVoiceDetectionEnabled(true);
+      }
+      return newValue;
+    });
+  };
+
+  const setSafeModeValue = (value: boolean) => {
+    setIsSafeMode(value);
+    if (value) {
+      setVoiceDetectionEnabled(false);
+    } else if (settings.voiceCommandEnabled && !isInSafeZone) {
+      setVoiceDetectionEnabled(true);
+    }
   };
 
   const updateSettings = (newSettings: Partial<AppSettings>) => {
@@ -265,6 +345,24 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   };
 
   const shareLocation = async () => {
+    const googleMapsUrl = getGoogleMapsUrl();
+    
+    // Try native share first if available
+    if (navigator.share && googleMapsUrl) {
+      try {
+        await navigator.share({
+          title: 'My Location - SafeHer',
+          text: 'I am sharing my live location with you.',
+          url: googleMapsUrl,
+        });
+        toast.success('Location shared');
+        return;
+      } catch (e) {
+        // User cancelled or share not supported, fallback to SMS
+      }
+    }
+    
+    // Send via SMS
     await sendEmergencySMS(true);
   };
 
@@ -280,6 +378,10 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         isSafeMode,
         isSendingSMS,
         alertHistory,
+        currentAlertId,
+        isInSafeZone,
+        currentSafeZone,
+        voiceDetectionEnabled,
         setCurrentLocation,
         addEmergencyContact,
         removeEmergencyContact,
@@ -292,9 +394,12 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
         triggerSOS,
         cancelSOS,
         toggleSafeMode,
+        setSafeMode: setSafeModeValue,
         updateSettings,
         shareLocation,
         addAlertToHistory,
+        updateAlertRecordings,
+        getGoogleMapsUrl,
       }}
     >
       {children}
