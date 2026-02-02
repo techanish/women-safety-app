@@ -1,5 +1,5 @@
-import React, { useState, useCallback } from 'react';
-import { GoogleMap, useJsApiLoader, Marker } from '@react-google-maps/api';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
+import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { MapPin, Navigation, Share2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -44,19 +44,64 @@ function GoogleMapView({ apiKey }: { apiKey: string }) {
   };
 
   const [map, setMap] = useState<google.maps.Map | null>(null);
+  const markerRef = useRef<google.maps.marker.AdvancedMarkerElement | null>(null);
 
   const onLoad = useCallback((map: google.maps.Map) => {
     setMap(map);
   }, []);
 
   const onUnmount = useCallback(() => {
+    if (markerRef.current) {
+      markerRef.current.map = null;
+    }
     setMap(null);
   }, []);
 
-  // Update map center when location changes
-  React.useEffect(() => {
+  // Update map center when location changes and manage marker
+  useEffect(() => {
     if (map && currentLocation) {
       map.panTo({ lat: currentLocation.latitude, lng: currentLocation.longitude });
+      
+      // Try to use AdvancedMarkerElement if available, fall back to standard Marker
+      if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+        // Always recreate AdvancedMarkerElement to avoid position update issues
+        if (markerRef.current && 'map' in markerRef.current) {
+          markerRef.current.map = null; // Remove old marker
+        }
+        
+        const markerDiv = document.createElement('div');
+        markerDiv.className = 'w-4 h-4 rounded-full bg-pink-500 border-2 border-white shadow-lg';
+        
+        try {
+          markerRef.current = new window.google.maps.marker.AdvancedMarkerElement({
+            position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+            map: map,
+            content: markerDiv,
+          });
+        } catch (error) {
+          console.warn('AdvancedMarkerElement failed, using fallback:', error);
+          markerRef.current = null; // Clear ref to trigger fallback
+        }
+      }
+      
+      // Fallback: if AdvancedMarkerElement is not available or failed, use custom SVG marker
+      if (!markerRef.current && map) {
+        const markerImage = {
+          path: window.google.maps.SymbolPath.CIRCLE,
+          scale: 8,
+          fillColor: '#f472b6',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 2,
+        };
+        
+        markerRef.current = new window.google.maps.Marker({
+          position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+          map: map,
+          icon: markerImage,
+          title: 'Current Location',
+        }) as any;
+      }
     }
   }, [map, currentLocation]);
 
@@ -110,21 +155,10 @@ function GoogleMapView({ apiKey }: { apiKey: string }) {
           mapTypeControl: false,
           streetViewControl: false,
           fullscreenControl: false,
+          mapId: 'safe-location-map',
         }}
       >
-        {currentLocation && (
-          <Marker
-            position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }}
-            icon={{
-              path: google.maps.SymbolPath.CIRCLE,
-              scale: 8,
-              fillColor: '#f472b6',
-              fillOpacity: 1,
-              strokeColor: '#ffffff',
-              strokeWeight: 2,
-            }}
-          />
-        )}
+        {/* AdvancedMarkerElement is managed in useEffect */}
       </GoogleMap>
       
       {/* Location info overlay */}

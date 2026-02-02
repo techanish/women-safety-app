@@ -1,12 +1,23 @@
 import { useCallback, useEffect, useState } from 'react';
 import { EmergencyContact, Location } from '@/types/safety';
 import { addPendingSOSEvent, getPendingSOSEvents, markSOSEventSynced } from '@/lib/offlineDB';
+import { useSafety } from '@/contexts/SafetyContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
 export function useOfflineSOS() {
+  const { currentLocation, emergencyContacts } = useSafety();
   const [isOnline, setIsOnline] = useState(navigator.onLine);
   const [isSyncing, setIsSyncing] = useState(false);
+  const [pendingCount, setPendingCount] = useState(0);
+
+  useEffect(() => {
+    const loadPendingCount = async () => {
+      const pending = await getPendingSOSEvents();
+      setPendingCount(pending.length);
+    };
+    loadPendingCount();
+  }, []);
 
   useEffect(() => {
     const handleOnline = () => {
@@ -24,8 +35,8 @@ export function useOfflineSOS() {
     };
   }, []);
 
-  const syncPendingEvents = async () => {
-    if (isSyncing) return;
+  const syncPendingEvents = useCallback(async () => {
+    if (isSyncing || !isOnline) return;
     setIsSyncing(true);
 
     try {
@@ -33,106 +44,132 @@ export function useOfflineSOS() {
       
       for (const event of pendingEvents) {
         try {
+          const mapsUrl = event.location 
+            ? `https://maps.google.com/?q=${event.location.latitude},${event.location.longitude}`
+            : undefined;
+
           const { error } = await supabase.functions.invoke('send-sms', {
             body: {
               phoneNumbers: event.contacts.map(c => c.phone),
               message: event.type === 'sos' 
-                ? `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.`
-                : `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.`,
+                ? `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.\n\n${mapsUrl ? `📍 Location: ${mapsUrl}` : ''}`
+                : `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.\n\n${mapsUrl ? `View location: ${mapsUrl}` : ''}`,
               location: event.location,
-              liveLocationUrl: event.location 
-                ? `https://maps.google.com/?q=${event.location.latitude},${event.location.longitude}`
-                : undefined,
+              liveLocationUrl: mapsUrl,
             },
           });
 
           if (!error) {
             await markSOSEventSynced(event.id);
+            toast.success('Offline SOS synced');
           }
-        } catch (e) {
-          console.error('Failed to sync event:', event.id, e);
+        } catch (error) {
+          console.error('Failed to sync event:', event.id, error);
         }
       }
-      
-      toast.success('Synced offline SOS events');
-    } catch (e) {
-      console.error('Sync failed:', e);
+
+      const remaining = await getPendingSOSEvents();
+      setPendingCount(remaining.length);
+    } catch (error) {
+      console.error('Failed to sync pending events:', error);
+      toast.error('Failed to sync SOS events');
     } finally {
       setIsSyncing(false);
     }
-  };
+  }, [isSyncing, isOnline]);
 
-  const triggerOfflineSOS = useCallback(async (
-    contacts: EmergencyContact[],
-    location: Location | null,
-    clerkUserId?: string
-  ) => {
-    // Store the event offline first
-    const eventId = crypto.randomUUID();
-    await addPendingSOSEvent({
-      id: eventId,
-      type: 'sos',
-      timestamp: Date.now(),
-      location,
-      contacts,
-      synced: false,
-      clerkUserId,
-    });
+  /**
+   * Add a pending SOS event (works offline)
+   */
+  const triggerOfflineSOS = useCallback(async (triggerType: 'button' | 'voice' | 'shake' | 'timer' | 'route_deviation') => {
+    try {
+      const sosEvent = {
+        id: crypto.randomUUID(),
+        type: 'sos',
+        timestamp: Date.now(),
+        location: currentLocation || null,
+        contacts: emergencyContacts,
+        synced: false,
+      };
 
-    // Try to send SMS via device if available (for native apps)
-    if ('sms' in navigator) {
-      try {
-        const smsBody = location
-          ? `🆘 EMERGENCY! I need help. My location: https://maps.google.com/?q=${location.latitude},${location.longitude}`
-          : `🆘 EMERGENCY! I need help immediately!`;
-        
-        for (const contact of contacts) {
-          // @ts-ignore - SMS API may not be typed
-          await navigator.sms.send(contact.phone, smsBody);
-        }
-        toast.success('Emergency SMS sent via device');
-      } catch (e) {
-        console.error('Device SMS failed:', e);
+      await addPendingSOSEvent(sosEvent);
+      setPendingCount(prev => prev + 1);
+
+      if (isOnline) {
+        // Try to sync immediately if online
+        await syncPendingEvents();
+      } else {
+        toast.info('SOS saved - will sync when online');
       }
-    }
 
-    // Try to make emergency call
-    if (contacts.length > 0) {
-      const primaryContact = contacts.find(c => c.isPrimary) || contacts[0];
-      // Create a tel: link for emergency call
-      const telLink = document.createElement('a');
-      telLink.href = `tel:${primaryContact.phone}`;
-      telLink.click();
+      return true;
+    } catch (error) {
+      console.error('Failed to save offline SOS:', error);
+      return false;
     }
+  }, [currentLocation, emergencyContacts, isOnline, syncPendingEvents]);
 
-    // If online, also try API
-    if (navigator.onLine) {
-      try {
-        await supabase.functions.invoke('send-sms', {
-          body: {
-            phoneNumbers: contacts.map(c => c.phone),
-            message: `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.`,
-            location,
-            liveLocationUrl: location 
-              ? `https://maps.google.com/?q=${location.latitude},${location.longitude}`
-              : undefined,
-          },
+  /**
+   * Send emergency SMS using native device capability or Supabase
+   */
+  const sendEmergencySMS = useCallback(async (phoneNumbers: string[], message: string) => {
+    try {
+      // Check for Capacitor SMS plugin
+      if ((window as any).capacitor?.Plugins?.SMS) {
+        const SMS = (window as any).capacitor.Plugins.SMS;
+        const result = await SMS.sendSms({ 
+          phoneNumbers, 
+          message 
         });
-        await markSOSEventSynced(eventId);
-      } catch (e) {
-        console.error('API SMS failed, event saved offline:', e);
+        if (result) {
+          toast.success('SMS sent via device');
+          return true;
+        }
       }
-    } else {
-      toast.info('Offline: SOS saved locally. Will sync when online.');
-    }
 
-    return eventId;
+      // Fallback to Supabase SMS function
+      const { error } = await supabase.functions.invoke('send-sms', {
+        body: { phoneNumbers, message },
+      });
+
+      if (error) throw error;
+      toast.success('SMS sent');
+      return true;
+    } catch (error) {
+      console.error('SMS send error:', error);
+      toast.error('Failed to send SMS');
+      return false;
+    }
+  }, []);
+
+  /**
+   * Make emergency call
+   */
+  const makeEmergencyCall = useCallback((phoneNumber: string) => {
+    try {
+      // Check for Capacitor Call plugin
+      if ((window as any).capacitor?.Plugins?.Call) {
+        const Call = (window as any).capacitor.Plugins.Call;
+        Call.makeCall({ number: phoneNumber });
+        return true;
+      }
+
+      // Fallback to tel: link
+      window.location.href = `tel:${phoneNumber}`;
+      return true;
+    } catch (error) {
+      console.error('Call error:', error);
+      return false;
+    }
   }, []);
 
   return {
     isOnline,
     isSyncing,
+    pendingCount,
     triggerOfflineSOS,
     syncPendingEvents,
+    sendEmergencySMS,
+    makeEmergencyCall,
   };
 }

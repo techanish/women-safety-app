@@ -67,11 +67,16 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
   const [currentAlertId, setCurrentAlertId] = useState<string | null>(null);
   const [voiceDetectionEnabled, setVoiceDetectionEnabled] = useState(false);
 
-  // Geofencing integration
+  // Geofencing integration - auto enable safe mode in safe zones
   const handleEnterSafeZone = useCallback((zone: SafeZone) => {
     toast.success(`Entered safe zone: ${zone.name}`);
     setIsSafeMode(true);
     setVoiceDetectionEnabled(false);
+    // Disable camera and mic detection in safe mode
+    setSettings(prev => ({
+      ...prev,
+      safeMode: true,
+    }));
   }, []);
 
   const handleExitSafeZone = useCallback((zone: SafeZone) => {
@@ -81,6 +86,10 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     if (settings.voiceCommandEnabled) {
       setVoiceDetectionEnabled(true);
     }
+    setSettings(prev => ({
+      ...prev,
+      safeMode: false,
+    }));
   }, [settings.voiceCommandEnabled]);
 
   const { isInSafeZone, currentSafeZone } = useGeofencing({
@@ -316,6 +325,12 @@ export function SafetyProvider({ children }: { children: ReactNode }) {
     });
     setIsSOSActive(false);
     setCurrentAlertId(null);
+    
+    // Re-enable voice detection if it was enabled before SOS and not in safe zone
+    if (settings.voiceCommandEnabled && !isSafeMode && !isInSafeZone) {
+      setVoiceDetectionEnabled(true);
+    }
+    
     toast.info('SOS cancelled');
   };
 

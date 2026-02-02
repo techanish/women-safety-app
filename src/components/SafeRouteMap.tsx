@@ -1,5 +1,5 @@
-import React, { useMemo, useState } from 'react';
-import { GoogleMap, Marker, Polyline, useJsApiLoader } from '@react-google-maps/api';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { GoogleMap, Polyline, useJsApiLoader, Marker } from '@react-google-maps/api';
 import { AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import type { Location } from '@/types/safety';
@@ -15,6 +15,8 @@ interface SafeRouteMapProps {
 
 export function SafeRouteMap({ currentLocation, waypoints, onAddWaypoint }: SafeRouteMapProps) {
   const [apiKey] = useState(() => localStorage.getItem('google_maps_api_key') || '');
+  const [map, setMap] = useState<google.maps.Map | null>(null);
+  const markersRef = useRef<google.maps.marker.AdvancedMarkerElement[]>([]);
 
   const center = useMemo(() => {
     if (currentLocation) return { lat: currentLocation.latitude, lng: currentLocation.longitude };
@@ -60,6 +62,85 @@ export function SafeRouteMap({ currentLocation, waypoints, onAddWaypoint }: Safe
     );
   }
 
+  // Manage markers for current location and waypoints
+  useEffect(() => {
+    if (!map) return;
+
+    // Remove old markers
+    markersRef.current.forEach(marker => {
+      if ('map' in marker) {
+        (marker as any).map = null;
+      } else {
+        (marker as any).map = null;
+      }
+    });
+    markersRef.current = [];
+
+    try {
+      // Try AdvancedMarkerElement first if available
+      if (window.google?.maps?.marker?.AdvancedMarkerElement) {
+        // Add current location marker
+        if (currentLocation) {
+          const currentMarkerDiv = document.createElement('div');
+          currentMarkerDiv.className = 'w-4 h-4 rounded-full bg-pink-500 border-2 border-white shadow-lg';
+          
+          markersRef.current.push(
+            new window.google.maps.marker.AdvancedMarkerElement({
+              position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+              map: map,
+              content: currentMarkerDiv,
+              title: 'Current Location',
+            }) as any
+          );
+        }
+
+        // Add waypoint markers
+        waypoints.forEach((wp, idx) => {
+          const waypointDiv = document.createElement('div');
+          waypointDiv.className = 'w-6 h-6 rounded-full bg-blue-500 border-2 border-white shadow-lg flex items-center justify-center';
+          waypointDiv.style.fontSize = '12px';
+          waypointDiv.style.fontWeight = '600';
+          waypointDiv.style.color = 'white';
+          waypointDiv.textContent = String(idx + 1);
+          
+          markersRef.current.push(
+            new window.google.maps.marker.AdvancedMarkerElement({
+              position: { lat: wp.latitude, lng: wp.longitude },
+              map: map,
+              content: waypointDiv,
+              title: `Waypoint ${idx + 1}`,
+            }) as any
+          );
+        });
+      } else {
+        // Fallback to Marker API if AdvancedMarkerElement is not available
+        if (currentLocation) {
+          markersRef.current.push(
+            new window.google.maps.Marker({
+              position: { lat: currentLocation.latitude, lng: currentLocation.longitude },
+              map: map,
+              title: 'Current Location',
+            })
+          );
+        }
+
+        waypoints.forEach((wp, idx) => {
+          markersRef.current.push(
+            new window.google.maps.Marker({
+              position: { lat: wp.latitude, lng: wp.longitude },
+              map: map,
+              label: String(idx + 1),
+              title: `Waypoint ${idx + 1}`,
+            })
+          );
+        });
+      }
+    } catch (error) {
+      console.warn('Marker creation failed:', error);
+      // Graceful degradation - map will still work without markers
+    }
+  }, [map, currentLocation, waypoints]);
+
   if (!isLoaded) {
     return (
       <div className="h-full w-full flex items-center justify-center rounded-xl border border-border bg-card">
@@ -74,35 +155,27 @@ export function SafeRouteMap({ currentLocation, waypoints, onAddWaypoint }: Safe
         mapContainerStyle={{ width: '100%', height: '100%' }}
         center={center}
         zoom={15}
+        onLoad={(mapInstance) => setMap(mapInstance)}
+        onUnmount={() => {
+          markersRef.current.forEach(marker => {
+            marker.map = null;
+          });
+          markersRef.current = [];
+          setMap(null);
+        }}
         options={{
           disableDefaultUI: true,
           zoomControl: true,
           fullscreenControl: false,
           mapTypeControl: false,
           streetViewControl: false,
+          mapId: 'safe-route-map',
         }}
         onClick={(e) => {
           if (!e.latLng) return;
           onAddWaypoint(e.latLng.lat(), e.latLng.lng());
         }}
       >
-        {currentLocation && (
-          <Marker position={{ lat: currentLocation.latitude, lng: currentLocation.longitude }} />
-        )}
-
-        {waypoints.map((wp, idx) => (
-          <Marker
-            key={`${wp.latitude}-${wp.longitude}-${idx}`}
-            position={{ lat: wp.latitude, lng: wp.longitude }}
-            label={{
-              text: String(idx + 1),
-              color: 'hsl(var(--foreground))',
-              fontSize: '12px',
-              fontWeight: '600',
-            }}
-          />
-        ))}
-
         {path.length >= 2 && (
           <Polyline
             path={path}
