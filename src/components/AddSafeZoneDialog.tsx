@@ -6,7 +6,7 @@ import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { MapPin, Home, Briefcase, GraduationCap, Building2 } from 'lucide-react';
 import { useSafety } from '@/contexts/SafetyContext';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 interface AddSafeZoneDialogProps {
   open: boolean;
@@ -84,7 +84,7 @@ export function AddSafeZoneDialog({ open, onOpenChange }: AddSafeZoneDialogProps
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="sm:max-w-md max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <MapPin className="w-5 h-5 text-primary" />

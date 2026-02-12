@@ -89,7 +89,7 @@ export function EmergencyContacts({ onClose }: EmergencyContactsProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8"
+                  className="h-11 w-11"
                   onClick={() => togglePrimary(contact.id)}
                 >
                   <Star className={cn(
@@ -100,7 +100,7 @@ export function EmergencyContacts({ onClose }: EmergencyContactsProps) {
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-8 w-8 text-destructive"
+                  className="h-11 w-11 text-destructive"
                   onClick={() => removeEmergencyContact(contact.id)}
                 >
                   <Trash2 className="w-4 h-4" />

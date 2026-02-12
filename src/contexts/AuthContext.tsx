@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react';
 import { saveUserProfile, getUserProfile, cacheSession, getCachedSession, clearCachedSession } from '@/lib/offlineDB';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 export interface UserProfile {
   id: string;
@@ -9,6 +9,7 @@ export interface UserProfile {
   fatherName: string;
   motherName: string;
   age: number;
+  gender?: 'male' | 'female' | 'other';
   bloodGroup?: string;
   phone: string;
   email: string;

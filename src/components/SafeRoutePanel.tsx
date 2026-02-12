@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import { Route, MapPin, Plus, Play, Square, Trash2, Navigation, AlertTriangle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { useSafety } from '@/contexts/SafetyContext';
 import { useSafeRoute } from '@/hooks/useSafeRoute';
 import { SafeRouteMap } from '@/components/SafeRouteMap';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
   const { currentLocation, triggerSOS } = useSafety();
   const [routeName, setRouteName] = useState('');
@@ -120,7 +120,7 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
                 </span>
               </div>
 
-              <div className="relative h-56 mb-4">
+              <div className="relative h-56 sm:h-64 md:h-72 mb-4">
                 <SafeRouteMap
                   currentLocation={currentLocation}
                   waypoints={tempWaypoints}
@@ -241,9 +241,12 @@ export function SafeRoutePanel({ onClose }: { onClose: () => void }) {
 
         {/* Route Name Dialog */}
         <Dialog open={showNameDialog} onOpenChange={setShowNameDialog}>
-          <DialogContent>
+          <DialogContent className="sm:max-w-sm max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Name Your Route</DialogTitle>
+              <DialogDescription>
+                Enter a name for your safe route
+              </DialogDescription>
             </DialogHeader>
             <Input
               placeholder="e.g., Home to Office"

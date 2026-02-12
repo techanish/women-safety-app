@@ -3,7 +3,7 @@ import { EmergencyContact, Location } from '@/types/safety';
 import { addPendingSOSEvent, getPendingSOSEvents, markSOSEventSynced } from '@/lib/offlineDB';
 import { useSafety } from '@/contexts/SafetyContext';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 export function useOfflineSOS() {
   const { currentLocation, emergencyContacts } = useSafety();
@@ -19,39 +19,23 @@ export function useOfflineSOS() {
     loadPendingCount();
   }, []);
 
-  useEffect(() => {
-    const handleOnline = () => {
-      setIsOnline(true);
-      syncPendingEvents();
-    };
-    const handleOffline = () => setIsOnline(false);
-
-    window.addEventListener('online', handleOnline);
-    window.addEventListener('offline', handleOffline);
-
-    return () => {
-      window.removeEventListener('online', handleOnline);
-      window.removeEventListener('offline', handleOffline);
-    };
-  }, []);
-
   const syncPendingEvents = useCallback(async () => {
     if (isSyncing || !isOnline) return;
     setIsSyncing(true);
 
     try {
       const pendingEvents = await getPendingSOSEvents();
-      
+
       for (const event of pendingEvents) {
         try {
-          const mapsUrl = event.location 
+          const mapsUrl = event.location
             ? `https://maps.google.com/?q=${event.location.latitude},${event.location.longitude}`
             : undefined;
 
           const { error } = await supabase.functions.invoke('send-sms', {
             body: {
               phoneNumbers: event.contacts.map(c => c.phone),
-              message: event.type === 'sos' 
+              message: event.type === 'sos'
                 ? `🆘 EMERGENCY ALERT!\n\nI need help immediately. This is an automated SOS alert from SafeHer app.\n\n${mapsUrl ? `📍 Location: ${mapsUrl}` : ''}`
                 : `📍 Location Update from SafeHer:\n\nI'm sharing my current location with you for safety.\n\n${mapsUrl ? `View location: ${mapsUrl}` : ''}`,
               location: event.location,
@@ -77,6 +61,22 @@ export function useOfflineSOS() {
       setIsSyncing(false);
     }
   }, [isSyncing, isOnline]);
+
+  useEffect(() => {
+    const handleOnline = () => {
+      setIsOnline(true);
+      syncPendingEvents();
+    };
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, [syncPendingEvents]);
 
   /**
    * Add a pending SOS event (works offline)

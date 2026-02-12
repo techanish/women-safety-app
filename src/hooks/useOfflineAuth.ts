@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import { cacheSession, getCachedSession, clearCachedSession } from '@/lib/offlineDB';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 export interface CachedAuthSession {
   clerkUserId: string;

@@ -3,8 +3,16 @@ import { Phone, PhoneOff, Volume2, VolumeX, Mic, MicOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { useTextToSpeech, INDIAN_VOICES } from '@/hooks/useTextToSpeech';
+
+// Extend Window interface for Speech Recognition
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
 
 interface FakeCallScreenProps {
   callerName: string;
@@ -31,7 +39,7 @@ export function FakeCallScreen({
   const [aiMessage, setAiMessage] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [conversationHistory, setConversationHistory] = useState<{role: string, content: string}[]>([]);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const { speak, stop, isPlaying } = useTextToSpeech();
 
   // Get voice based on persona
@@ -68,7 +76,9 @@ export function FakeCallScreen({
     if (isAnswered && conversationHistory.length === 0) {
       getAIResponse();
     }
-  }, [isAnswered]);
+    // getAIResponse defined below, this is intentionally not in deps to avoid loops
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isAnswered, conversationHistory.length]);
 
   // Speak AI message using Google Cloud TTS
   useEffect(() => {
@@ -76,6 +86,8 @@ export function FakeCallScreen({
       const voice = getVoiceForPersona();
       speak(aiMessage, voice);
     }
+    // getVoiceForPersona, speak, and isPlaying are stable references
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [aiMessage, isSpeaker, isAnswered]);
 
   const getAIResponse = async (userMessage?: string) => {
@@ -123,19 +135,19 @@ export function FakeCallScreen({
 
   const startListening = () => {
     if ('webkitSpeechRecognition' in window || 'SpeechRecognition' in window) {
-      const SpeechRecognition = (window as any).webkitSpeechRecognition || (window as any).SpeechRecognition;
+      const SpeechRecognition = window.webkitSpeechRecognition || window.SpeechRecognition;
       recognitionRef.current = new SpeechRecognition();
       recognitionRef.current.continuous = false;
       recognitionRef.current.interimResults = false;
       recognitionRef.current.lang = 'en-IN';
 
-      recognitionRef.current.onresult = (event: any) => {
+      recognitionRef.current.onresult = (event: SpeechRecognitionEvent) => {
         const transcript = event.results[0][0].transcript;
         getAIResponse(transcript);
       };
 
-      recognitionRef.current.onerror = (event: any) => {
-        console.error('Speech recognition error:', event.error);
+      recognitionRef.current.onerror = (event: Event) => {
+        console.error('Speech recognition error:', event);
       };
 
       recognitionRef.current.start();
@@ -279,7 +291,7 @@ export function FakeCallScreen({
             </Button>
           </div>
         ) : (
-          <div className="flex justify-center gap-16">
+          <div className="flex justify-center gap-6">
             <Button
               variant="destructive"
               size="icon-xl"

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback, useRef } from 'react';
 import { EmergencyContact, Location, SafeZone, CheckInTimer, AppSettings, SOSAlert, AlertHistory, AlertRecording } from '@/types/safety';
 import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 import { useGeofencing } from '@/hooks/useGeofencing';
 
 interface SafetyContextType {

@@ -135,7 +135,7 @@ export function SOSActiveOverlay() {
   const googleMapsUrl = getGoogleMapsUrl();
 
   return (
-    <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-xl flex flex-col">
+    <div className="fixed inset-0 z-50 bg-primary/10 backdrop-blur-xl flex flex-col safe-area-top safe-area-bottom">
       {/* Animated background */}
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute inset-0 bg-gradient-to-b from-primary/20 to-background" />

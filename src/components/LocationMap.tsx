@@ -175,10 +175,10 @@ function GoogleMapView({ apiKey }: { apiKey: string }) {
             )}
           </div>
           <div className="flex gap-2">
-            <Button variant="glass" size="icon" className="h-8 w-8">
+            <Button variant="glass" size="icon" className="h-11 w-11">
               <Navigation className="w-4 h-4" />
             </Button>
-            <Button variant="glass" size="icon" className="h-8 w-8">
+            <Button variant="glass" size="icon" className="h-11 w-11">
               <Share2 className="w-4 h-4" />
             </Button>
           </div>

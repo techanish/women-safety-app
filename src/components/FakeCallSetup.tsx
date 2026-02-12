@@ -48,7 +48,7 @@ export function FakeCallSetup({ onClose, onStartCall }: FakeCallSetupProps) {
       </p>
 
       {/* Persona Selection */}
-      <div className="grid grid-cols-2 gap-3 mb-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-6">
         {personas.map((persona) => (
           <button
             key={persona.id}

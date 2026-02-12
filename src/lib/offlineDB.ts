@@ -76,26 +76,39 @@ let dbInstance: IDBPDatabase<SafeHerDB> | null = null;
 export async function getDB(): Promise<IDBPDatabase<SafeHerDB>> {
   if (dbInstance) return dbInstance;
 
-  dbInstance = await openDB<SafeHerDB>('safeher-offline', 1, {
-    upgrade(db) {
-      // Pending SOS events for offline sync
-      const sosStore = db.createObjectStore('pendingSOSEvents', { keyPath: 'id' });
-      sosStore.createIndex('by-synced', 'synced');
+  dbInstance = await openDB<SafeHerDB>('safeher-offline', 2, {
+    upgrade(db, oldVersion) {
+      // Version 1: Initial stores
+      if (oldVersion < 1) {
+        // Pending SOS events for offline sync
+        const sosStore = db.createObjectStore('pendingSOSEvents', { keyPath: 'id' });
+        sosStore.createIndex('by-synced', 'synced');
 
-      // Alert history with recordings
-      db.createObjectStore('alertHistory', { keyPath: 'id' });
+        // Alert history with recordings
+        db.createObjectStore('alertHistory', { keyPath: 'id' });
 
-      // User profile
-      db.createObjectStore('userProfile', { keyPath: 'id' });
+        // User profile
+        db.createObjectStore('userProfile', { keyPath: 'id' });
 
-      // Safe routes
-      db.createObjectStore('safeRoutes', { keyPath: 'id' });
+        // Safe routes
+        db.createObjectStore('safeRoutes', { keyPath: 'id' });
 
-      // Recordings (audio/video)
-      db.createObjectStore('recordings', { keyPath: 'id' });
+        // Recordings (audio/video)
+        db.createObjectStore('recordings', { keyPath: 'id' });
 
-      // Cached session for offline auth
-      db.createObjectStore('cachedSession', { keyPath: 'clerkUserId' });
+        // Cached session for offline auth
+        db.createObjectStore('cachedSession', { keyPath: 'clerkUserId' });
+      }
+
+      // Version 2: Add notifications store
+      if (oldVersion < 2) {
+        if (!db.objectStoreNames.contains('notifications')) {
+          const notifStore = db.createObjectStore('notifications', { keyPath: 'id' });
+          notifStore.createIndex('by-timestamp', 'timestamp');
+          notifStore.createIndex('by-read', 'read');
+          notifStore.createIndex('by-category', 'category');
+        }
+      }
     },
   });
 

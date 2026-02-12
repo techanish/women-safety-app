@@ -1,15 +1,76 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { MapPin, Navigation, Share2, Shield, Plus, Building2, Home as HomeIcon, Briefcase, GraduationCap, Trash2, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { useSafety } from '@/contexts/SafetyContext';
 import { AddSafeZoneDialog } from '@/components/AddSafeZoneDialog';
-import { LocationMap } from '@/components/LocationMap';
+import { AdvancedOpenStreetMap } from '@/components/AdvancedOpenStreetMap';
+import { OfflineMapDialog } from '@/components/OfflineMapDialog';
+import { RouteTrackingDialog } from '@/components/RouteTrackingDialog';
+import { NearbyPlacesDialog } from '@/components/NearbyPlacesDialog';
+import { MapSearchDialog } from '@/components/MapSearchDialog';
+import { AddPinDialog } from '@/components/AddPinDialog';
+import { useCustomPins } from '@/hooks/useCustomPins';
 import { cn } from '@/lib/utils';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 export function LocationPanel() {
   const { currentLocation, safeZones, shareLocation, isSendingSMS, removeSafeZone } = useSafety();
+  const customPins = useCustomPins();
   const [isAddSafeZoneOpen, setIsAddSafeZoneOpen] = useState(false);
+  const [isOfflineMapOpen, setIsOfflineMapOpen] = useState(false);
+  const [isRouteTrackingOpen, setIsRouteTrackingOpen] = useState(false);
+  const [isNearbyPlacesOpen, setIsNearbyPlacesOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isAddPinOpen, setIsAddPinOpen] = useState(false);
+  const [isAddingPin, setIsAddingPin] = useState(false);
+  const [pendingPinLocation, setPendingPinLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchLocation, setSearchLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string>('');
+
+  // Reverse geocode current location to get address
+  useEffect(() => {
+    const getAddress = async () => {
+      if (!currentLocation) {
+        setLocationAddress('');
+        return;
+      }
+
+      // Only fetch address if we have reasonable GPS accuracy (less than 100 meters)
+      // This prevents showing wrong location while GPS is still getting an accurate fix
+      if (currentLocation.accuracy && currentLocation.accuracy > 100) {
+        setLocationAddress('Getting accurate location...');
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}&format=json&addressdetails=1`
+        );
+        const data = await response.json();
+
+        if (data.address) {
+          // Build a readable address from the components
+          const parts = [];
+          if (data.address.road) parts.push(data.address.road);
+          if (data.address.suburb) parts.push(data.address.suburb);
+          if (data.address.city || data.address.town || data.address.village) {
+            parts.push(data.address.city || data.address.town || data.address.village);
+          }
+          if (data.address.state) parts.push(data.address.state);
+
+          setLocationAddress(parts.join(', ') || data.display_name);
+        } else {
+          setLocationAddress(data.display_name || 'Unknown location');
+        }
+      } catch (error) {
+        console.error('Error fetching address:', error);
+        // Fallback to coordinates if reverse geocoding fails
+        setLocationAddress(`${currentLocation.latitude.toFixed(6)}, ${currentLocation.longitude.toFixed(6)}`);
+      }
+    };
+
+    getAddress();
+  }, [currentLocation]);
 
   const handleShareLocation = async () => {
     if (!currentLocation) {
@@ -43,6 +104,29 @@ export function LocationPanel() {
     toast.success(`Safe zone "${name}" removed`);
   };
 
+  const handleOpenAddPin = () => {
+    setIsAddingPin(true);
+    setIsAddPinOpen(true);
+  };
+
+  const handlePinLocationSelected = (lat: number, lng: number) => {
+    setPendingPinLocation({ lat, lng });
+  };
+
+  const handleAddPin = (title: string, category: any) => {
+    if (pendingPinLocation) {
+      customPins.addPin(pendingPinLocation.lat, pendingPinLocation.lng, title, undefined, category);
+      toast.success('Pin added');
+      setPendingPinLocation(null);
+      setIsAddingPin(false);
+    }
+  };
+
+  const handleSearchLocationSelected = (lat: number, lng: number, label: string) => {
+    setSearchLocation({ lat, lng });
+    toast.success(`Location found: ${label}`);
+  };
+
   return (
     <div className="flex flex-col h-full p-6 pb-24">
       <h2 className="text-2xl font-display font-bold text-foreground mb-6">Location</h2>
@@ -56,8 +140,8 @@ export function LocationPanel() {
           <div>
             <p className="font-semibold text-foreground">Current Location</p>
             <p className="text-sm text-muted-foreground">
-              {currentLocation 
-                ? `${currentLocation.latitude.toFixed(6)}, ${currentLocation.longitude.toFixed(6)}`
+              {currentLocation
+                ? (locationAddress || 'Loading address...')
                 : 'Locating...'}
             </p>
           </div>
@@ -76,7 +160,17 @@ export function LocationPanel() {
 
       {/* Live map */}
       <div className="mb-6">
-        <LocationMap />
+        <AdvancedOpenStreetMap 
+          onOpenDownloadUI={() => setIsOfflineMapOpen(true)}
+          onOpenRoutes={() => setIsRouteTrackingOpen(true)}
+          onOpenNearbyPlaces={() => setIsNearbyPlacesOpen(true)}
+          onOpenSearch={() => setIsSearchOpen(true)}
+          onOpenAddPin={handleOpenAddPin}
+          showNearbyPlaces={isNearbyPlacesOpen}
+          isAddingPin={isAddingPin}
+          onPinLocationSelected={handlePinLocationSelected}
+          searchLocation={searchLocation}
+        />
       </div>
       {/* Safe Zones */}
       <div className="mb-4">
@@ -143,7 +237,7 @@ export function LocationPanel() {
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Nearby Help
         </h3>
-        <div className="grid grid-cols-2 gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
           <button 
             onClick={() => openNearbyHelp('police')}
             className="glass p-3 rounded-xl flex items-center gap-2 hover:bg-card/90 transition-all active:scale-95"
@@ -162,6 +256,26 @@ export function LocationPanel() {
       </div>
 
       <AddSafeZoneDialog open={isAddSafeZoneOpen} onOpenChange={setIsAddSafeZoneOpen} />
+      <OfflineMapDialog open={isOfflineMapOpen} onOpenChange={setIsOfflineMapOpen} />
+      <RouteTrackingDialog open={isRouteTrackingOpen} onOpenChange={setIsRouteTrackingOpen} />
+      <NearbyPlacesDialog open={isNearbyPlacesOpen} onOpenChange={setIsNearbyPlacesOpen} />
+      <MapSearchDialog 
+        open={isSearchOpen} 
+        onOpenChange={setIsSearchOpen}
+        onLocationSelected={handleSearchLocationSelected}
+      />
+      <AddPinDialog
+        open={isAddPinOpen}
+        onOpenChange={(open) => {
+          setIsAddPinOpen(open);
+          if (!open) {
+            setIsAddingPin(false);
+            setPendingPinLocation(null);
+          }
+        }}
+        pendingLocation={pendingPinLocation}
+        onAddPin={handleAddPin}
+      />
     </div>
   );
 }

@@ -1,6 +1,14 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useSafety } from '@/contexts/SafetyContext';
 
+// Extend Window interface for Speech Recognition
+declare global {
+  interface Window {
+    SpeechRecognition: typeof SpeechRecognition;
+    webkitSpeechRecognition: typeof SpeechRecognition;
+  }
+}
+
 interface VoiceDetectionOptions {
   keywords: string[];
   onKeywordDetected?: (keyword: string) => void;
@@ -20,7 +28,7 @@ export function useVoiceDetection({
   const [isListening, setIsListening] = useState(false);
   const [transcript, setTranscript] = useState('');
   const [lastDetection, setLastDetection] = useState<{ keyword: string; timestamp: number } | null>(null);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
   const detectionTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const restartTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const lastSpeechTimeRef = useRef<number>(Date.now());

@@ -59,7 +59,7 @@ export function QuickActions({
   onNearby,
 }: QuickActionsProps) {
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
       <QuickAction
         icon={<Phone className="w-6 h-6" />}
         label="Fake Call"

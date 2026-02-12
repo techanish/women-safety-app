@@ -1,10 +1,10 @@
 import React, { useState } from 'react';
-import { 
-  Mic, 
-  Vibrate, 
-  Volume2, 
-  MapPin, 
-  Battery, 
+import {
+  Mic,
+  Vibrate,
+  Volume2,
+  MapPin,
+  Battery,
   Bell,
   Languages,
   Shield,
@@ -13,9 +13,12 @@ import {
 } from 'lucide-react';
 import { Switch } from '@/components/ui/switch';
 import { useSafety } from '@/contexts/SafetyContext';
+import { useAppAuth } from '@/contexts/AuthContext';
 import { cn } from '@/lib/utils';
 import { VoiceKeywordsDialog, NotificationsDialog, PrivacyDialog } from './SettingsDialogs';
 import { ProfileSettings } from './ProfileSettings';
+import { LoginPrompt } from './auth/LoginPrompt';
+import { UserProfileCard } from './auth/UserProfileCard';
 
 interface SettingItemProps {
   icon: React.ReactNode;
@@ -30,17 +33,17 @@ function SettingItem({ icon, label, description, action, onClick }: SettingItemP
     <div
       onClick={onClick}
       className={cn(
-        "flex items-center gap-4 p-4 rounded-xl transition-all",
+        "flex items-center gap-3 sm:gap-4 p-3 sm:p-4 rounded-xl transition-all",
         onClick && "cursor-pointer hover:bg-muted/50"
       )}
     >
       <div className="p-2 rounded-lg bg-muted/50 text-muted-foreground">
         {icon}
       </div>
-      <div className="flex-1">
-        <p className="font-medium text-foreground">{label}</p>
+      <div className="flex-1 min-w-0">
+        <p className="font-medium text-foreground text-sm sm:text-base">{label}</p>
         {description && (
-          <p className="text-sm text-muted-foreground">{description}</p>
+          <p className="text-xs sm:text-sm text-muted-foreground">{description}</p>
         )}
       </div>
       {action || (onClick && <ChevronRight className="w-5 h-5 text-muted-foreground" />)}
@@ -50,6 +53,7 @@ function SettingItem({ icon, label, description, action, onClick }: SettingItemP
 
 export function SettingsPanel() {
   const { settings, updateSettings } = useSafety();
+  const { isAuthenticated, isLoading } = useAppAuth();
   const [showVoiceKeywords, setShowVoiceKeywords] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showPrivacy, setShowPrivacy] = useState(false);
@@ -60,15 +64,25 @@ export function SettingsPanel() {
   }
 
   return (
-    <div className="flex flex-col h-full p-6 pb-24">
+    <div className="flex flex-col h-full p-4 sm:p-6 pb-24 max-w-2xl mx-auto w-full">
       <h2 className="text-2xl font-display font-bold text-foreground mb-6">Settings</h2>
+
+      {/* Account & Profile */}
+      <div className="mb-6">
+        <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
+          Account & Profile
+        </h3>
+        {!isLoading && (
+          isAuthenticated ? <UserProfileCard /> : <LoginPrompt />
+        )}
+      </div>
 
       {/* Trigger Settings */}
       <div className="mb-6">
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           SOS Triggers
         </h3>
-        <div className="glass rounded-2xl overflow-hidden divide-y divide-border/50">
+        <div className="glass rounded-2xl overflow-hidden divide-y divide-border">
           <SettingItem
             icon={<Mic className="w-5 h-5" />}
             label="Voice Commands"
@@ -116,7 +130,7 @@ export function SettingsPanel() {
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Location & Tracking
         </h3>
-        <div className="glass rounded-2xl overflow-hidden divide-y divide-border/50">
+        <div className="glass rounded-2xl overflow-hidden divide-y divide-border">
           <SettingItem
             icon={<MapPin className="w-5 h-5" />}
             label="Background Tracking"
@@ -151,7 +165,7 @@ export function SettingsPanel() {
         <h3 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">
           Customization
         </h3>
-        <div className="glass rounded-2xl overflow-hidden divide-y divide-border/50">
+        <div className="glass rounded-2xl overflow-hidden divide-y divide-border">
           <SettingItem
             icon={<Languages className="w-5 h-5" />}
             label="Voice Keywords"

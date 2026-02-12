@@ -42,13 +42,6 @@ export function useSOSRecording(options: UseSOSRecordingOptions = {}) {
     recordings: [],
   });
 
-  // Auto-start recording when SOS is triggered
-  useEffect(() => {
-    if (isSOSActive && currentAlertId) {
-      startSOSRecording();
-    }
-  }, [isSOSActive, currentAlertId]);
-
   const startSOSRecording = useCallback(async () => {
     if (!currentAlertId) return;
 
@@ -59,22 +52,22 @@ export function useSOSRecording(options: UseSOSRecordingOptions = {}) {
         const audioMimeType = MediaRecorder.isTypeSupported('audio/webm')
           ? 'audio/webm'
           : 'audio/mp4';
-        
+
         const audioRecorder = new MediaRecorder(audioStream, { mimeType: audioMimeType });
         audioRecorderRef.current = audioRecorder;
         chunksRef.current.audio = [];
-        
+
         audioRecorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
             chunksRef.current.audio.push(e.data);
           }
         };
-        
+
         audioRecorder.onstop = async () => {
           const blob = new Blob(chunksRef.current.audio, { type: audioMimeType });
           const url = URL.createObjectURL(blob);
           const duration = (Date.now() - startTimeRef.current) / 1000;
-          
+
           const recording: AlertRecording = {
             id: crypto.randomUUID(),
             type: 'audio',
@@ -107,22 +100,22 @@ export function useSOSRecording(options: UseSOSRecordingOptions = {}) {
         const videoMimeType = MediaRecorder.isTypeSupported('video/webm')
           ? 'video/webm'
           : 'video/mp4';
-        
+
         const videoRecorder = new MediaRecorder(videoStream, { mimeType: videoMimeType });
         videoRecorderRef.current = videoRecorder;
         chunksRef.current.video = [];
-        
+
         videoRecorder.ondataavailable = (e) => {
           if (e.data.size > 0) {
             chunksRef.current.video.push(e.data);
           }
         };
-        
+
         videoRecorder.onstop = async () => {
           const blob = new Blob(chunksRef.current.video, { type: videoMimeType });
           const url = URL.createObjectURL(blob);
           const duration = (Date.now() - startTimeRef.current) / 1000;
-          
+
           const recording: AlertRecording = {
             id: crypto.randomUUID(),
             type: 'video',
@@ -160,6 +153,13 @@ export function useSOSRecording(options: UseSOSRecordingOptions = {}) {
       console.error('Failed to start SOS recording:', error);
     }
   }, [currentAlertId, includeAudio, includeVideo, recordingState.recordings, updateAlertRecordings]);
+
+  // Auto-start recording when SOS is triggered
+  useEffect(() => {
+    if (isSOSActive && currentAlertId) {
+      startSOSRecording();
+    }
+  }, [isSOSActive, currentAlertId, startSOSRecording]);
 
   const stopSOSRecording = useCallback(async () => {
     if (audioRecorderRef.current && audioRecorderRef.current.state !== 'inactive') {

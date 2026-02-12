@@ -1,4 +1,5 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap');
+@import 'leaflet/dist/leaflet.css';
 
 @tailwind base;
 @tailwind components;
@@ -213,3 +214,103 @@
 .safe-area-bottom {
   padding-bottom: env(safe-area-inset-bottom, 0);
 }
+
+.pb-safe {
+  padding-bottom: max(1rem, env(safe-area-inset-bottom));
+}
+
+/* Android-specific optimizations */
+@supports (-webkit-touch-callout: none) {
+  /* iOS-specific styles */
+  body {
+    -webkit-user-select: none;
+    -webkit-touch-callout: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input, textarea, button {
+    -webkit-user-select: text;
+  }
+}
+
+/* Better touch targets for mobile */
+@media (max-width: 640px) {
+  button, a, [role="button"] {
+    min-height: 44px;
+    min-width: 44px;
+  }
+
+  /* Enhanced touch target enforcement for Android - override Tailwind utility classes */
+  button.h-6, button.w-6,
+  button.h-7, button.w-7,
+  button.h-8, button.w-8 {
+    min-height: 2.75rem !important;
+    min-width: 2.75rem !important;
+  }
+
+  /* Prevent zoom on input focus (Android) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Better dialog padding on mobile */
+  [role="dialog"] {
+    margin: 0 !important;
+    max-width: 100vw !important;
+    max-height: 90vh !important;
+  }
+
+  /* Reduce spacing in forms on mobile */
+  form {
+    padding: 0.5rem;
+  }
+}
+
+/* Prevent overscroll bounce on Android */
+html, body {
+  overscroll-behavior-y: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Better active states for touch */
+button:active, [role="button"]:active {
+  transform: scale(0.98);
+  transition: transform 0.1s ease;
+}
+
+/* Smooth scrolling for dialogs */
+[role="dialog"], .overflow-y-auto {
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+}
+
+/* Map progress bars */
+[role="progressbar"] {
+  width: 0%;
+}
+
+[role="progressbar"][data-width] {
+  transition: width 0.3s ease;
+}
+
+[data-width="0"] { width: 0%; }
+[data-width="1"], [data-width="2"], [data-width="3"], [data-width="4"], [data-width="5"],
+[data-width="6"], [data-width="7"], [data-width="8"], [data-width="9"], [data-width="10"] { width: 10%; }
+[data-width="11"], [data-width="12"], [data-width="13"], [data-width="14"], [data-width="15"],
+[data-width="16"], [data-width="17"], [data-width="18"], [data-width="19"], [data-width="20"] { width: 20%; }
+[data-width="21"], [data-width="22"], [data-width="23"], [data-width="24"], [data-width="25"],
+[data-width="26"], [data-width="27"], [data-width="28"], [data-width="29"], [data-width="30"] { width: 30%; }
+[data-width="31"], [data-width="32"], [data-width="33"], [data-width="34"], [data-width="35"],
+[data-width="36"], [data-width="37"], [data-width="38"], [data-width="39"], [data-width="40"] { width: 40%; }
+[data-width="41"], [data-width="42"], [data-width="43"], [data-width="44"], [data-width="45"],
+[data-width="46"], [data-width="47"], [data-width="48"], [data-width="49"], [data-width="50"] { width: 50%; }
+[data-width="51"], [data-width="52"], [data-width="53"], [data-width="54"], [data-width="55"],
+[data-width="56"], [data-width="57"], [data-width="58"], [data-width="59"], [data-width="60"] { width: 60%; }
+[data-width="61"], [data-width="62"], [data-width="63"], [data-width="64"], [data-width="65"],
+[data-width="66"], [data-width="67"], [data-width="68"], [data-width="69"], [data-width="70"] { width: 70%; }
+[data-width="71"], [data-width="72"], [data-width="73"], [data-width="74"], [data-width="75"],
+[data-width="76"], [data-width="77"], [data-width="78"], [data-width="79"], [data-width="80"] { width: 80%; }
+[data-width="81"], [data-width="82"], [data-width="83"], [data-width="84"], [data-width="85"],
+[data-width="86"], [data-width="87"], [data-width="88"], [data-width="89"], [data-width="90"] { width: 90%; }
+[data-width="91"], [data-width="92"], [data-width="93"], [data-width="94"], [data-width="95"],
+[data-width="96"], [data-width="97"], [data-width="98"], [data-width="99"], [data-width="100"] { width: 100%; }

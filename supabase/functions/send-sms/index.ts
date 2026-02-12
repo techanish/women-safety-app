@@ -8,7 +8,7 @@ const corsHeaders = {
 
 // Validate Indian phone number format (10 digits starting with 6-9)
 const isValidIndianPhone = (phone: string): boolean => {
-  const cleaned = phone.replace(/[\s\-\+]/g, '').replace(/^91/, '');
+  const cleaned = phone.replace(/[\s\-+]/g, '').replace(/^91/, '');
   return /^[6-9]\d{9}$/.test(cleaned);
 };
 
@@ -92,7 +92,7 @@ serve(async (req) => {
 
     // Format phone numbers - remove +91 prefix if present and clean
     const formattedNumbers = phoneNumbers.map((num: string) => {
-      return num.replace(/[\s\-\+]/g, '').replace(/^91/, '');
+      return num.replace(/[\s\-+]/g, '').replace(/^91/, '');
     }).join(',');
 
     // Build the message with location

@@ -1,7 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Location } from '@/types/safety';
 import { saveSafeRoute, getSafeRoutes, deleteSafeRoute } from '@/lib/offlineDB';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
+import { useOfflineMaps } from './useOfflineMaps';
 
 export interface SafeRoute {
   id: string;
@@ -25,6 +26,7 @@ export function useSafeRoute({ currentLocation, deviationThreshold = 200, onDevi
   const [isSettingRoute, setIsSettingRoute] = useState(false);
   const [tempWaypoints, setTempWaypoints] = useState<Array<{ latitude: number; longitude: number }>>([]);
   const lastDeviationCheckRef = useRef<number>(0);
+  const { downloadArea } = useOfflineMaps();
 
   // Load routes from IndexedDB
   useEffect(() => {
@@ -61,6 +63,27 @@ export function useSafeRoute({ currentLocation, deviationThreshold = 200, onDevi
     return R * c;
   }, []);
 
+  // Helper function to calculate distance to a line segment
+  const distanceToSegment = useCallback((
+    px: number, py: number,
+    x1: number, y1: number,
+    x2: number, y2: number
+  ): number => {
+    const dx = x2 - x1;
+    const dy = y2 - y1;
+    const length = Math.sqrt(dx * dx + dy * dy);
+
+    if (length === 0) {
+      return calculateDistance(px, py, x1, y1);
+    }
+
+    const t = Math.max(0, Math.min(1, ((px - x1) * dx + (py - y1) * dy) / (length * length)));
+    const projX = x1 + t * dx;
+    const projY = y1 + t * dy;
+
+    return calculateDistance(px, py, projX, projY);
+  }, [calculateDistance]);
+
   // Calculate minimum distance from current location to route path
   const calculateDistanceToRoute = useCallback((location: Location, waypoints: Array<{ latitude: number; longitude: number }>): number => {
     if (waypoints.length < 2) return Infinity;
@@ -83,30 +106,7 @@ export function useSafeRoute({ currentLocation, deviationThreshold = 200, onDevi
     }
 
     return minDistance;
-  }, []);
-
-  // Helper function to calculate distance to a line segment
-  const distanceToSegment = (
-    px: number, py: number,
-    x1: number, y1: number,
-    x2: number, y2: number
-  ): number => {
-    const dx = x2 - x1;
-    const dy = y2 - y1;
-    const length = Math.sqrt(dx * dx + dy * dy);
-
-    if (length === 0) {
-      return calculateDistance(px, py, x1, y1);
-    }
-
-    let t = ((px - x1) * dx + (py - y1) * dy) / (length * length);
-    t = Math.max(0, Math.min(1, t));
-
-    const nearestX = x1 + t * dx;
-    const nearestY = y1 + t * dy;
-
-    return calculateDistance(px, py, nearestX, nearestY);
-  };
+  }, [distanceToSegment]);
 
   // Check for route deviation
   useEffect(() => {
@@ -190,8 +190,23 @@ export function useSafeRoute({ currentLocation, deviationThreshold = 200, onDevi
         r.id === routeId ? updatedRoute : { ...r, isActive: false }
       ));
       toast.success(`Route "${route.name}" activated`);
+
+      // Download offline maps for the route area
+      if (route.waypoints.length > 0) {
+        try {
+          // Calculate center of route
+          const centerLat = route.waypoints.reduce((sum, wp) => sum + wp.latitude, 0) / route.waypoints.length;
+          const centerLng = route.waypoints.reduce((sum, wp) => sum + wp.longitude, 0) / route.waypoints.length;
+          
+          // Download area with larger radius to cover entire route
+          await downloadArea(`Route: ${route.name}`, centerLat, centerLng, 3000, 15);
+        } catch (error) {
+          console.error('Failed to download offline maps for route:', error);
+          // Don't show error to user - offline maps are optional
+        }
+      }
     }
-  }, [routes]);
+  }, [routes, downloadArea]);
 
   const deactivateRoute = useCallback(async () => {
     if (activeRoute) {

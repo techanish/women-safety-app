@@ -3,7 +3,14 @@ import { Bell } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { SOSButton } from '@/components/SOSButton';
 import { QuickActions } from '@/components/QuickActions';
-import { LocationMap } from '@/components/LocationMap';
+import { AdvancedOpenStreetMap } from '@/components/AdvancedOpenStreetMap';
+import { OfflineMapDialog } from '@/components/OfflineMapDialog';
+import { RouteTrackingDialog } from '@/components/RouteTrackingDialog';
+import { NearbyPlacesDialog } from '@/components/NearbyPlacesDialog';
+import { MapSearchDialog } from '@/components/MapSearchDialog';
+import { AddPinDialog } from '@/components/AddPinDialog';
+import { NotificationPanel } from '@/components/NotificationPanel';
+import { useCustomPins } from '@/hooks/useCustomPins';
 import { SafeModeToggle } from '@/components/SafeModeToggle';
 import { BottomNav } from '@/components/BottomNav';
 import { FakeCallScreen } from '@/components/FakeCallScreen';
@@ -16,23 +23,29 @@ import { SOSActiveOverlay } from '@/components/SOSActiveOverlay';
 import { FakeCallSetup } from '@/components/FakeCallSetup';
 import { SafeRoutePanel } from '@/components/SafeRoutePanel';
 import { SafetyProvider, useSafety } from '@/contexts/SafetyContext';
+import { useNotifications } from '@/contexts/NotificationContext';
 import { useVoiceDetection } from '@/hooks/useVoiceDetection';
-import { toast } from 'sonner';
+import { toast } from '@/lib/toast';
 
 function Dashboard() {
-  const { 
-    isSafeMode, 
-    emergencyContacts, 
-    shareLocation, 
-    isSendingSMS, 
-    voiceDetectionEnabled, 
-    settings, 
+  const {
+    isSafeMode,
+    emergencyContacts,
+    shareLocation,
+    isSendingSMS,
+    voiceDetectionEnabled,
+    settings,
     triggerSOS,
     isInSafeZone,
-    currentSafeZone 
+    currentSafeZone,
+    currentLocation
   } = useSafety();
-  
+
+  const { unreadCount } = useNotifications();
+
+  const customPins = useCustomPins();
   const [activeTab, setActiveTab] = useState('home');
+  const [showNotifications, setShowNotifications] = useState(false);
   const [showFakeCallSetup, setShowFakeCallSetup] = useState(false);
   const [showFakeCall, setShowFakeCall] = useState(false);
   const [fakeCallAnswered, setFakeCallAnswered] = useState(false);
@@ -48,6 +61,59 @@ function Dashboard() {
   const [showCheckIn, setShowCheckIn] = useState(false);
   const [showContacts, setShowContacts] = useState(false);
   const [showSafeRoute, setShowSafeRoute] = useState(false);
+  const [isOfflineMapOpen, setIsOfflineMapOpen] = useState(false);
+  const [isRouteTrackingOpen, setIsRouteTrackingOpen] = useState(false);
+  const [isNearbyPlacesOpen, setIsNearbyPlacesOpen] = useState(false);
+  const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isAddPinOpen, setIsAddPinOpen] = useState(false);
+  const [isAddingPin, setIsAddingPin] = useState(false);
+  const [pendingPinLocation, setPendingPinLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [searchLocation, setSearchLocation] = useState<{ lat: number; lng: number } | null>(null);
+  const [locationAddress, setLocationAddress] = useState<string>('');
+
+  // Reverse geocode current location to get address
+  useEffect(() => {
+    const getAddress = async () => {
+      if (!currentLocation) {
+        setLocationAddress('');
+        return;
+      }
+
+      // Only fetch address if we have reasonable GPS accuracy (less than 100 meters)
+      // This prevents showing wrong location while GPS is still getting an accurate fix
+      if (currentLocation.accuracy && currentLocation.accuracy > 100) {
+        setLocationAddress('Getting accurate location...');
+        return;
+      }
+
+      try {
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?lat=${currentLocation.latitude}&lon=${currentLocation.longitude}&format=json&addressdetails=1`
+        );
+        const data = await response.json();
+
+        if (data.address) {
+          // Build a readable address from the components
+          const parts = [];
+          if (data.address.road) parts.push(data.address.road);
+          if (data.address.suburb) parts.push(data.address.suburb);
+          if (data.address.city || data.address.town || data.address.village) {
+            parts.push(data.address.city || data.address.town || data.address.village);
+          }
+          if (data.address.state) parts.push(data.address.state);
+
+          setLocationAddress(parts.join(', ') || data.display_name);
+        } else {
+          setLocationAddress(data.display_name || 'Unknown location');
+        }
+      } catch (error) {
+        console.error('Error fetching address:', error);
+        setLocationAddress('');
+      }
+    };
+
+    getAddress();
+  }, [currentLocation]);
 
   // Voice detection for SOS trigger words
   const handleKeywordDetected = useCallback((keyword: string) => {
@@ -80,6 +146,29 @@ function Dashboard() {
     setShowSafeRoute(true);
   };
 
+  const handleOpenAddPin = () => {
+    setIsAddingPin(true);
+    setIsAddPinOpen(true);
+  };
+
+  const handlePinLocationSelected = (lat: number, lng: number) => {
+    setPendingPinLocation({ lat, lng });
+  };
+
+  const handleAddPin = (title: string, category: any) => {
+    if (pendingPinLocation) {
+      customPins.addPin(pendingPinLocation.lat, pendingPinLocation.lng, title, undefined, category);
+      toast.success('Pin added');
+      setPendingPinLocation(null);
+      setIsAddingPin(false);
+    }
+  };
+
+  const handleSearchLocationSelected = (lat: number, lng: number, label: string) => {
+    setSearchLocation({ lat, lng });
+    toast.success(`Location found: ${label}`);
+  };
+
   const handleNearby = () => {
     // Open Google Maps search for nearby police stations, hospitals
     if (navigator.geolocation) {
@@ -100,15 +189,19 @@ function Dashboard() {
         return <SettingsPanel />;
       default:
         return (
-          <div className="flex flex-col h-full p-6 pb-24">
+          <div className="flex flex-col h-full p-6 pb-20 sm:pb-24 md:pb-28 safe-area-top safe-area-bottom">
             {/* Header */}
             <header className="flex items-center justify-between mb-6">
               <div>
-                <h1 className="text-2xl font-display font-bold text-foreground">
+                <h1 className="text-xl sm:text-2xl font-display font-bold text-foreground">
                   SafeHer
                 </h1>
                 <p className="text-sm text-muted-foreground">
-                  {isSafeMode ? 'Protected mode active' : isInSafeZone ? `In safe zone: ${currentSafeZone?.name}` : 'Your safety companion'}
+                  {isSafeMode
+                    ? 'Protected mode active'
+                    : isInSafeZone
+                    ? `In safe zone: ${currentSafeZone?.name}`
+                    : locationAddress || 'Your safety companion'}
                 </p>
               </div>
               <div className="flex items-center gap-2">
@@ -117,9 +210,13 @@ function Dashboard() {
                     🎤 Listening
                   </span>
                 )}
-                <Button variant="ghost" size="icon" className="relative">
+                <Button variant="ghost" size="icon" className="relative" onClick={() => setShowNotifications(true)}>
                   <Bell className="w-5 h-5" />
-                  <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-primary" />
+                  {unreadCount > 0 && (
+                    <span className="absolute top-0 right-0 flex h-5 w-5 items-center justify-center rounded-full bg-destructive text-[10px] text-destructive-foreground font-medium">
+                      {unreadCount > 99 ? '99+' : unreadCount}
+                    </span>
+                  )}
                 </Button>
               </div>
             </header>
@@ -137,7 +234,17 @@ function Dashboard() {
 
             {/* Location Map */}
             <div className="mb-6">
-              <LocationMap />
+              <AdvancedOpenStreetMap 
+                onOpenDownloadUI={() => setIsOfflineMapOpen(true)}
+                onOpenRoutes={() => setIsRouteTrackingOpen(true)}
+                onOpenNearbyPlaces={() => setIsNearbyPlacesOpen(true)}
+                onOpenSearch={() => setIsSearchOpen(true)}
+                onOpenAddPin={handleOpenAddPin}
+                showNearbyPlaces={isNearbyPlacesOpen}
+                isAddingPin={isAddingPin}
+                onPinLocationSelected={handlePinLocationSelected}
+                searchLocation={searchLocation}
+              />
             </div>
 
             {/* Quick Actions */}
@@ -221,6 +328,31 @@ function Dashboard() {
       {showSafeRoute && (
         <SafeRoutePanel onClose={() => setShowSafeRoute(false)} />
       )}
+
+      {/* Map Dialogs */}
+      <OfflineMapDialog open={isOfflineMapOpen} onOpenChange={setIsOfflineMapOpen} />
+      <RouteTrackingDialog open={isRouteTrackingOpen} onOpenChange={setIsRouteTrackingOpen} />
+      <NearbyPlacesDialog open={isNearbyPlacesOpen} onOpenChange={setIsNearbyPlacesOpen} />
+      <MapSearchDialog 
+        open={isSearchOpen} 
+        onOpenChange={setIsSearchOpen}
+        onLocationSelected={handleSearchLocationSelected}
+      />
+      <AddPinDialog
+        open={isAddPinOpen}
+        onOpenChange={(open) => {
+          setIsAddPinOpen(open);
+          if (!open) {
+            setIsAddingPin(false);
+            setPendingPinLocation(null);
+          }
+        }}
+        pendingLocation={pendingPinLocation}
+        onAddPin={handleAddPin}
+      />
+
+      {/* Notification Panel */}
+      <NotificationPanel open={showNotifications} onOpenChange={setShowNotifications} />
     </div>
   );
 }
